@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.wearaware.app.domain.model.DeviceCategory
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.ui.components.SafeWording
 import com.wearaware.app.ui.components.SignalBars
@@ -76,7 +77,13 @@ fun DeviceDetailScreen(
 
             // Classification
             Text("Classification", style = MaterialTheme.typography.titleSmall)
-            Text(device.classification.displayLabel, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = if (device.classification.category == DeviceCategory.UNKNOWN_BLE_DEVICE)
+                    SafeWording.UNKNOWN_DEVICE
+                else
+                    device.classification.displayLabel,
+                style = MaterialTheme.typography.bodyMedium
+            )
             Text("Category: ${device.classification.category}", style = MaterialTheme.typography.bodySmall)
             Text("Confidence: ${device.classification.confidence}", style = MaterialTheme.typography.bodySmall)
             device.classification.evaluationNotes?.let {

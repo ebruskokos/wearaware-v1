@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.wearaware.app.domain.model.DeviceCategory
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.util.FormatUtils
 
@@ -46,7 +47,10 @@ fun DeviceCard(
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(
-                    text = device.classification.displayLabel,
+                    text = if (device.classification.category == DeviceCategory.UNKNOWN_BLE_DEVICE)
+                        SafeWording.UNKNOWN_DEVICE
+                    else
+                        device.classification.displayLabel,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

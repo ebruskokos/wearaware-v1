@@ -21,7 +21,6 @@ class FingerprintClassifier(
         private const val MANUFACTURER_SCORE = 4
         private const val NAME_SCORE = 2
         private const val UUID_SCORE = 2
-        private const val FALLBACK_LABEL = "Unknown BLE device"
     }
 
     private data class ScoredRule(
@@ -84,7 +83,7 @@ class FingerprintClassifier(
                 matchedRuleId = null,
                 ruleVersion = rulesData.metadata.version,
                 category = DeviceCategory.UNKNOWN_BLE_DEVICE,
-                displayLabel = FALLBACK_LABEL,
+                displayLabel = "",
                 confidence = ConfidenceLevel.LOW,
                 isWearableCandidate = false,
                 evaluationNotes = "No rule matched score threshold"
