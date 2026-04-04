@@ -2,6 +2,7 @@ package com.wearaware.app.data.repository
 
 import com.wearaware.app.data.ble.BleScanner
 import com.wearaware.app.data.ble.toFingerprint
+import com.wearaware.app.data.ble.toHexString
 import com.wearaware.app.domain.model.*
 import com.wearaware.app.domain.repository.BleRepository
 import com.wearaware.app.domain.rules.FingerprintClassifier
@@ -13,21 +14,6 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * PURPOSE: Implements BleRepository:
- *   1. Collects raw scan results from BleScanner
- *   2. Computes a content-based fingerprint (hash of manufacturer data + UUIDs + name)
- *   3. Aggregates per-device state keyed by fingerprintId
- *   4. Classifies via FingerprintClassifier
- *   5. Computes ProximityLabel and VisibilityState
- *   6. Expires devices after REMOVE_AFTER_MS in SIGNAL_LOST state
- *   7. Emits sorted List<ObservedDevice> via StateFlow
- *
- * CONTINUOUS PRESENCE RULE:
- *   Brief signal flickers < SIGNAL_LOST_AFTER_MS do NOT reset firstSeenAt.
- *   Device removed only after REMOVE_AFTER_MS in SIGNAL_LOST. This means
- *   seenDurationMs accumulates over brief gaps — intentional design for real-world BLE noise.
- */
 @Singleton
 class BleRepositoryImpl @Inject constructor(
     private val bleScanner: BleScanner,
@@ -38,6 +24,7 @@ class BleRepositoryImpl @Inject constructor(
         val smoother: RssiSmoother = RssiSmoother(),
         val macAddress: String,
         val fingerprint: DeviceFingerprint,
+        val rawBleData: BleDebugData,
         val firstSeenAt: Long,
         var lastSeenAt: Long,
         var seenCount: Int = 1,
@@ -101,10 +88,25 @@ class BleRepositoryImpl @Inject constructor(
             existing.averagedRssi = existing.smoother.addReading(raw.rssi)
         } else {
             val smoother = RssiSmoother()
+            val debugData = BleDebugData(
+                serviceSolicitationUuids = raw.serviceSolicitationUuids,
+                serviceDataHex = raw.serviceData.mapValues { (_, v) -> v.toHexString() },
+                rawScanBytesHex = raw.rawScanBytes?.toHexString(),
+                isConnectable = raw.isConnectable,
+                advertisingFlags = raw.advertisingFlags,
+                timestampNanos = raw.timestampNanos,
+                primaryPhy = raw.primaryPhy,
+                secondaryPhy = raw.secondaryPhy,
+                advertisingSid = raw.advertisingSid,
+                periodicAdvertisingInterval = raw.periodicAdvertisingInterval,
+                deviceType = raw.deviceType,
+                bondState = raw.bondState
+            )
             deviceStates[key] = DeviceState(
                 smoother = smoother,
                 macAddress = raw.address,
                 fingerprint = fp,
+                rawBleData = debugData,
                 firstSeenAt = now,
                 lastSeenAt = now,
                 rawRssi = raw.rssi,
@@ -165,7 +167,8 @@ class BleRepositoryImpl @Inject constructor(
                     persistenceAlert = null,
                     macAddress = state.macAddress,
                     fingerprint = state.fingerprint,
-                    companyNames = state.fingerprint.manufacturerNames
+                    companyNames = state.fingerprint.manufacturerNames,
+                    rawBleData = state.rawBleData
                 )
             }
             .sortedByDescending { it.averagedRssi }

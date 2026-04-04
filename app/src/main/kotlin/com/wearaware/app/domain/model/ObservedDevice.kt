@@ -25,7 +25,9 @@ data class ObservedDevice(
     /** Content-based fingerprint derived from advertising fields. */
     val fingerprint: DeviceFingerprint? = null,
     /** Resolved company/brand names from manufacturer IDs (e.g. "Meta", "Apple"). */
-    val companyNames: List<String> = emptyList()
+    val companyNames: List<String> = emptyList(),
+    /** Raw BLE diagnostic data captured at first observation. Null if data unavailable. */
+    val rawBleData: BleDebugData? = null
 ) {
     val seenDurationMs: Long get() = lastSeenAt - firstSeenAt
 }
