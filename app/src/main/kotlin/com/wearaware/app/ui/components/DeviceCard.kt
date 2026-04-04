@@ -16,60 +16,86 @@ import com.wearaware.app.util.formatDuration
 fun DeviceCard(
     device: ObservedDevice,
     onClick: () -> Unit,
+    isTopCandidate: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val containerColor = if (isTopCandidate)
+        MaterialTheme.colorScheme.primaryContainer
+    else
+        MaterialTheme.colorScheme.surface
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Signal bars + visibility badge
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                SignalBars(proximity = device.proximityLabel)
-                Spacer(modifier = Modifier.height(4.dp))
-                VisibilityBadge(state = device.visibilityState)
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Device info
-            Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            if (isTopCandidate) {
                 Text(
-                    text = device.advertisedName
-                        ?: device.classification.matchedRuleId?.let { device.classification.displayLabel }
-                        ?: "BLE Device",
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Text(
-                    text = device.classification.displayLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = device.proximityLabel.name.replace('_', ' ').lowercase()
-                        .replaceFirstChar { it.uppercase() },
+                    text = "★ Best candidate for Wayfarer 00ZS",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Seen: ${device.seenDurationMs.formatDuration()}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)
                 )
             }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    SignalBars(proximity = device.proximityLabel)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    VisibilityBadge(state = device.visibilityState)
+                }
 
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "View device details",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    // Primary: advertised name, company name, or classification label
+                    val displayName = device.advertisedName
+                        ?: device.companyNames.firstOrNull()?.let { "$it device" }
+                        ?: device.classification.displayLabel.ifBlank { null }
+                        ?: "BLE Device"
+                    Text(
+                        text = displayName,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    // Manufacturer if known
+                    if (device.companyNames.isNotEmpty()) {
+                        Text(
+                            text = device.companyNames.joinToString(", "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Text(
+                        text = device.classification.displayLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = device.proximityLabel.name.replace('_', ' ').lowercase()
+                            .replaceFirstChar { it.uppercase() },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Seen: ${device.seenDurationMs.formatDuration()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "View device details",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
