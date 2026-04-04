@@ -31,16 +31,31 @@ fun ScanScreen(
     val permissionsState = rememberMultiplePermissionsState(
         permissions = PermissionUtils.BLE_PERMISSIONS.toList()
     ) { results ->
-        if (PermissionUtils.allGranted(results)) {
-            viewModel.startScanning()
-        } else {
-            viewModel.setPermissionsRequired()
-        }
+        if (PermissionUtils.allGranted(results)) viewModel.startScanning()
+        else viewModel.setPermissionsRequired()
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("WearAware") })
+            TopAppBar(
+                title = { Text("WearAware") },
+                actions = {
+                    if (uiState.scanState == ScanState.SCANNING) {
+                        TextButton(onClick = { viewModel.toggleFocusMode() }) {
+                            Text(
+                                text = if (uiState.focusMode) "All Devices" else "Focus Mode",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        TextButton(onClick = { viewModel.toggleDebugMode() }) {
+                            Text(
+                                text = if (uiState.debugMode) "Hide Debug" else "Debug",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                }
+            )
         }
     ) { innerPadding ->
         Column(
@@ -48,7 +63,7 @@ fun ScanScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
-            // Alert banner
+            // Persistence alert banner
             val alert = uiState.activeAlert
             if (alert != null) {
                 AlertBanner(
@@ -77,11 +92,18 @@ fun ScanScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(onClick = {
                             context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                        }) {
-                            Text("Turn on Bluetooth")
-                        }
+                        }) { Text("Turn on Bluetooth") }
                     }
                 }
+            }
+
+            // Target match banner (while scanning)
+            if (uiState.scanState == ScanState.SCANNING) {
+                TargetMatchBanner(
+                    bestMatch = uiState.bestMatch,
+                    onDeviceClick = onDeviceClick,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
             }
 
             // Scan status header
@@ -89,6 +111,18 @@ fun ScanScreen(
                 scanState = uiState.scanState,
                 deviceCount = uiState.devices.size
             )
+
+            // Focus mode label
+            if (uiState.focusMode && uiState.scanState == ScanState.SCANNING) {
+                Text(
+                    text = "Sorted by match score for Wayfarer 00ZS",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 4.dp)
+                )
+            }
 
             // Device list
             if (uiState.devices.isEmpty() && uiState.scanState == ScanState.SCANNING) {
@@ -109,13 +143,12 @@ fun ScanScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(
-                        items = uiState.devices,
-                        key = { it.id }
-                    ) { device ->
+                    items(items = uiState.sortedDevices, key = { it.id }) { device ->
+                        val matchResult = uiState.deviceMatchScores[device.id]
                         DeviceCard(
                             device = device,
-                            onClick = { onDeviceClick(device.id) }
+                            onClick = { onDeviceClick(device.id) },
+                            isTopCandidate = matchResult?.isTopCandidate == true
                         )
                     }
                 }
@@ -138,12 +171,13 @@ fun ScanScreen(
                 Text(if (uiState.scanState == ScanState.SCANNING) "Stop Scan" else "Start Scan")
             }
 
-            // Disclaimer
             Text(
                 text = SafeWording.DISCLAIMER,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 8.dp)
             )
         }
     }
