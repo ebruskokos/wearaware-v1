@@ -3,6 +3,7 @@ package com.wearaware.app.ui.viewmodel
 import com.wearaware.app.domain.model.MatchConfidence
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.PersistenceAlert
+import com.wearaware.app.domain.model.ScanFilter
 import com.wearaware.app.domain.model.TargetMatchResult
 
 data class ScanUiState(
@@ -14,11 +15,12 @@ data class ScanUiState(
     val ruleSetHash: String = "",
     val focusMode: Boolean = false,
     val debugMode: Boolean = false,
-    val deviceMatchScores: Map<String, TargetMatchResult> = emptyMap()
+    val deviceMatchScores: Map<String, TargetMatchResult> = emptyMap(),
+    val activeFilter: ScanFilter = ScanFilter.ALL
 ) {
     /**
      * Best-scoring candidate device paired with its match result, or null.
-     * Only MEDIUM or HIGH confidence devices qualify — LOW and NONE are excluded.
+     * Only MEDIUM or HIGH confidence devices qualify.
      */
     val bestMatch: Pair<ObservedDevice, TargetMatchResult>?
         get() {
@@ -40,6 +42,13 @@ data class ScanUiState(
         } else {
             devices
         }
+
+    /**
+     * sortedDevices with the active filter applied.
+     * ScanScreen uses this for its LazyColumn.
+     */
+    val filteredDevices: List<ObservedDevice>
+        get() = sortedDevices.filter { activeFilter.matches(it) }
 }
 
 enum class ScanState {

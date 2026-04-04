@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.PersistenceAlert
+import com.wearaware.app.domain.model.ScanFilter
 import com.wearaware.app.domain.model.VisibilityState
 import com.wearaware.app.domain.repository.BleRepository
 import com.wearaware.app.domain.usecase.*
@@ -81,6 +82,10 @@ class ScanViewModel @Inject constructor(
 
     fun toggleDebugMode() {
         _uiState.update { it.copy(debugMode = !it.debugMode) }
+    }
+
+    fun setFilter(filter: ScanFilter) {
+        _uiState.update { it.copy(activeFilter = filter) }
     }
 
     fun getDeviceById(deviceId: String): ObservedDevice? =
