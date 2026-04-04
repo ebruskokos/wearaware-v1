@@ -24,7 +24,7 @@ class ScanLogRepositoryImpl @Inject constructor(
 
     /** Logs a detection event by mapping ObservedDevice to a Room entity and inserting it. */
     override suspend fun log(device: ObservedDevice, matchResult: TargetMatchResult?) {
-        dao.insert(device.toScanLogEntity())
+        dao.insert(device.toScanLogEntity(matchResult))
     }
 
     /** Returns a live stream of all session log entries, newest first. */

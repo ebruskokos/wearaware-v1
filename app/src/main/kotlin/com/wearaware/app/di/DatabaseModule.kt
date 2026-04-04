@@ -26,7 +26,7 @@ object DatabaseModule {
             context,
             WearAwareDatabase::class.java,
             WearAwareDatabase.DATABASE_NAME
-        ).build()
+        ).fallbackToDestructiveMigration().build()
 
     @Provides
     fun provideScanLogDao(database: WearAwareDatabase): ScanLogDao =

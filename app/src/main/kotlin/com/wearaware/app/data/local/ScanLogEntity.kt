@@ -1,5 +1,6 @@
 package com.wearaware.app.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -23,5 +24,10 @@ data class ScanLogEntity(
     val ruleVersion: String?,
     val category: String,
     val confidence: String,
-    val evaluationNotes: String?
+    val evaluationNotes: String?,
+    @ColumnInfo(defaultValue = "NULL") val fingerprintId: String? = null,
+    @ColumnInfo(defaultValue = "NULL") val manufacturerIds: String? = null,
+    @ColumnInfo(defaultValue = "NULL") val targetMatchScore: Int? = null,
+    @ColumnInfo(defaultValue = "NULL") val targetMatchReason: String? = null,
+    @ColumnInfo(defaultValue = "0") val isTopCandidate: Boolean = false
 )

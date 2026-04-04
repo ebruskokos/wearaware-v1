@@ -20,5 +20,10 @@ data class ScanLogEntry(
     val ruleVersion: String?,
     val category: String,
     val confidence: String,
-    val evaluationNotes: String?
+    val evaluationNotes: String?,
+    val fingerprintId: String? = null,
+    val manufacturerIds: String? = null,     // stored as comma-separated hex (e.g. "0075,004C")
+    val targetMatchScore: Int? = null,
+    val targetMatchReason: String? = null,
+    val isTopCandidate: Boolean = false
 )
