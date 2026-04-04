@@ -4,8 +4,8 @@ package com.wearaware.app.domain.model
  * PURPOSE: Pure representation of a single BLE scan result with ALL available fields.
  *   Sits at the data/domain boundary — created in data layer, consumed by domain.
  * LIMITATIONS: address may be randomized (Android 6+ BLE MAC randomization).
- *   isConnectable requires API 26+; bondState/deviceType are from BluetoothDevice.
- * NOTES: No android.bluetooth imports here — all types are Kotlin primitives or stdlib.
+ *   Fields guarded by API level have safe defaults (empty / 0 / null / 255).
+ * NOTES: No android.bluetooth imports — all types are Kotlin primitives or stdlib.
  */
 data class RawScanResult(
     /** BLE device address. May be randomized per-session on Android 6+. */
@@ -33,5 +33,19 @@ data class RawScanResult(
     /** BluetoothDevice bond state: 10=none, 11=bonding, 12=bonded. */
     val bondState: Int,
     /** Epoch milliseconds when this scan result was received. */
-    val timestampMs: Long
+    val timestampMs: Long,
+    /** Service solicitation UUIDs. Requires API 29+; empty if unavailable. */
+    val serviceSolicitationUuids: List<String> = emptyList(),
+    /** Raw ScanRecord bytes. Null if ScanRecord is null. */
+    val rawScanBytes: ByteArray? = null,
+    /** Hardware timestamp in nanoseconds since boot (from ScanResult.timestampNanos). */
+    val timestampNanos: Long = 0L,
+    /** Primary advertising PHY (1=LE 1M, 2=LE 2M, 3=LE Coded). Requires API 26+; 0 if unavailable. */
+    val primaryPhy: Int = 0,
+    /** Secondary advertising PHY. Requires API 26+; 0 if unavailable. */
+    val secondaryPhy: Int = 0,
+    /** Advertising set ID. Requires API 26+; 255 = not present. */
+    val advertisingSid: Int = 255,
+    /** Periodic advertising interval in units of 1.25 ms. Requires API 26+; 0 if unavailable. */
+    val periodicAdvertisingInterval: Int = 0
 )
