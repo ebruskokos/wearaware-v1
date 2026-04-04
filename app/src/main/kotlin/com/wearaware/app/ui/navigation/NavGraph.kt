@@ -1,12 +1,15 @@
 package com.wearaware.app.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.wearaware.app.ui.screens.DeviceDetailScreen
 import com.wearaware.app.ui.screens.ScanScreen
 import com.wearaware.app.ui.screens.SessionLogScreen
+import com.wearaware.app.ui.viewmodel.ScanViewModel
 
 sealed class Screen(val route: String) {
     object Scan : Screen("scan")
@@ -28,9 +31,15 @@ fun WearAwareNavGraph(navController: NavHostController) {
         }
         composable(Screen.DeviceDetail.route) { backStackEntry ->
             val deviceId = backStackEntry.arguments?.getString("deviceId") ?: return@composable
+            // Share ScanViewModel with ScanScreen so device data is still available
+            val scanEntry = remember(backStackEntry) {
+                navController.getBackStackEntry(Screen.Scan.route)
+            }
+            val viewModel: ScanViewModel = hiltViewModel(scanEntry)
             DeviceDetailScreen(
                 deviceId = deviceId,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                viewModel = viewModel
             )
         }
         composable(Screen.SessionLog.route) {
