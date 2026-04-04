@@ -146,10 +146,16 @@ class BleRepositoryImpl @Inject constructor(
                 val rawScanForClassification = RawScanResult(
                     address = fingerprint,
                     advertisedName = state.advertisedName,
+                    bluetoothDeviceName = null,
                     rssi = state.rawRssi,
                     manufacturerData = state.manufacturerData,
                     serviceUuids = state.serviceUuids,
+                    serviceData = emptyMap(),
                     txPowerLevel = state.txPowerLevel,
+                    advertisingFlags = null,
+                    isConnectable = false,
+                    deviceType = 0,
+                    bondState = 10,
                     timestampMs = state.lastSeenAt
                 )
                 val classification = classifier.classify(rawScanForClassification)

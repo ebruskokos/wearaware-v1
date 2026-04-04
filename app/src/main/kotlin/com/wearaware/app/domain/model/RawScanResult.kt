@@ -1,25 +1,37 @@
 package com.wearaware.app.domain.model
 
 /**
- * PURPOSE: Pure representation of a single BLE scan result before any enrichment.
- *   Sits at the data/domain boundary — created in the data layer, consumed by domain.
- * LIMITATIONS: address may be randomized (Android 6+ BLE address randomization).
- *   manufacturerData keys are Company IDs (16-bit integers from Bluetooth SIG).
- * NOTES: This is NOT an Android class — it contains no android.bluetooth imports.
+ * PURPOSE: Pure representation of a single BLE scan result with ALL available fields.
+ *   Sits at the data/domain boundary — created in data layer, consumed by domain.
+ * LIMITATIONS: address may be randomized (Android 6+ BLE MAC randomization).
+ *   isConnectable requires API 26+; bondState/deviceType are from BluetoothDevice.
+ * NOTES: No android.bluetooth imports here — all types are Kotlin primitives or stdlib.
  */
 data class RawScanResult(
     /** BLE device address. May be randomized per-session on Android 6+. */
     val address: String,
-    /** Advertised device name from BLE ScanRecord. Null if device does not broadcast name. */
+    /** Advertised device name from ScanRecord. Null if device does not broadcast name. */
     val advertisedName: String?,
-    /** Raw RSSI in dBm. Negative value; closer to 0 = stronger signal. */
+    /** Device name from BluetoothDevice (bonded/cached). May differ from advertisedName. */
+    val bluetoothDeviceName: String?,
+    /** Raw RSSI in dBm. */
     val rssi: Int,
-    /** BLE manufacturer-specific data. Key = Company ID (int), Value = raw bytes. */
+    /** Manufacturer-specific data. Key = Bluetooth SIG Company ID (int), value = raw bytes. */
     val manufacturerData: Map<Int, ByteArray>,
-    /** BLE service UUIDs advertised by the device. Normalized to lowercase strings. */
+    /** Service UUIDs advertised. Normalized to lowercase strings. */
     val serviceUuids: List<String>,
-    /** TX power level from BLE advertising packet. Null if not present in scan record. */
+    /** Service data map. Key = service UUID (lowercase), value = raw bytes. */
+    val serviceData: Map<String, ByteArray>,
+    /** TX power level from ad packet. Null if not present. */
     val txPowerLevel: Int?,
+    /** LE advertising flags byte. Null if not present in ScanRecord. */
+    val advertisingFlags: Int?,
+    /** Whether the device is connectable. Requires API 26+; false if unavailable. */
+    val isConnectable: Boolean,
+    /** BluetoothDevice type: 0=unknown, 1=classic, 2=LE, 3=dual. */
+    val deviceType: Int,
+    /** BluetoothDevice bond state: 10=none, 11=bonding, 12=bonded. */
+    val bondState: Int,
     /** Epoch milliseconds when this scan result was received. */
     val timestampMs: Long
 )

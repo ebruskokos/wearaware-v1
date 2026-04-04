@@ -55,10 +55,16 @@ class FingerprintClassifierTest {
     ) = RawScanResult(
         address = address,
         advertisedName = name,
+        bluetoothDeviceName = null,
         rssi = -60,
         manufacturerData = manufacturerIds.associateWith { byteArrayOf() },
         serviceUuids = serviceUuids,
+        serviceData = emptyMap(),
         txPowerLevel = null,
+        advertisingFlags = null,
+        isConnectable = false,
+        deviceType = 0,
+        bondState = 10,
         timestampMs = 0L
     )
 
