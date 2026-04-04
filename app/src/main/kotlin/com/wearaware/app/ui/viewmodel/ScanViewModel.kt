@@ -13,22 +13,12 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * PURPOSE: Orchestrates the BLE scanning session for ScanScreen.
- *   Collects device updates, evaluates persistence alerts, logs events,
- *   and exposes a single ScanUiState via StateFlow.
- * LIMITATIONS: loggedDeviceIds prevents duplicate logging for the same device within
- *   a session but does not persist across sessions.
- * NOTES: ViewModels do not contain BLE parsing, RSSI math, or rule evaluation.
- *   All logic is delegated to use cases or the repository.
- *   ScanViewModel manages alert dismissal UI state but does NOT reset cooldown on dismiss
- *   (by design — see SafeWording design notes).
- */
 @HiltViewModel
 class ScanViewModel @Inject constructor(
     private val observeScannedDevices: ObserveScannedDevicesUseCase,
     private val evaluatePersistence: EvaluatePersistenceUseCase,
     private val logScanEvent: LogScanEventUseCase,
+    private val matchTargetDevice: MatchTargetDeviceUseCase,
     private val bleRepository: BleRepository,
     aboutInfo: AboutInfo
 ) : ViewModel() {
@@ -36,9 +26,7 @@ class ScanViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ScanUiState())
     val uiState: StateFlow<ScanUiState> = _uiState.asStateFlow()
 
-    /** Tracks last alert trigger time per (deviceId:alertType) key for cooldown management. */
     private val lastAlertedAt = mutableMapOf<String, Long>()
-    /** Tracks which device IDs have been logged this session to avoid duplicate log entries. */
     private val loggedDeviceIds = mutableSetOf<String>()
 
     init {
@@ -58,11 +46,8 @@ class ScanViewModel @Inject constructor(
         }
         bleRepository.startScanning()
         _uiState.update { it.copy(scanState = ScanState.SCANNING) }
-
         viewModelScope.launch {
-            observeScannedDevices().collect { devices ->
-                processDeviceUpdate(devices)
-            }
+            observeScannedDevices().collect { devices -> processDeviceUpdate(devices) }
         }
     }
 
@@ -74,7 +59,8 @@ class ScanViewModel @Inject constructor(
             it.copy(
                 scanState = ScanState.STOPPED,
                 devices = emptyList(),
-                activeAlert = null
+                activeAlert = null,
+                deviceMatchScores = emptyMap()
             )
         }
     }
@@ -85,37 +71,40 @@ class ScanViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Hides the active alert banner without resetting the cooldown.
-     * The device remains in the list; the cooldown prevents re-alerting too soon.
-     */
     fun dismissAlert() {
         _uiState.update { it.copy(activeAlert = null) }
+    }
+
+    fun toggleFocusMode() {
+        _uiState.update { it.copy(focusMode = !it.focusMode) }
+    }
+
+    fun toggleDebugMode() {
+        _uiState.update { it.copy(debugMode = !it.debugMode) }
     }
 
     fun getDeviceById(deviceId: String): ObservedDevice? =
         _uiState.value.devices.find { it.id == deviceId }
 
     private fun processDeviceUpdate(devices: List<ObservedDevice>) {
-        // Log each newly detected device once per session
+        // 1. Compute target match scores
+        val matchScores = matchTargetDevice(devices, DefaultTargetProfile.WAYFARER_00ZS)
+
+        // 2. Log new devices with match score
         devices
             .filter { it.id !in loggedDeviceIds && it.visibilityState == VisibilityState.DETECTED_NOW }
             .forEach { device ->
                 loggedDeviceIds.add(device.id)
-                viewModelScope.launch { logScanEvent(device) }
+                viewModelScope.launch { logScanEvent(device, matchScores[device.id]) }
             }
 
-        // Evaluate persistence alerts for all DETECTED_NOW devices
+        // 3. Evaluate persistence alerts
         val newAlerts = devices.mapNotNull { device ->
             evaluatePersistence(device, lastAlertedAt)?.also { alert ->
-                val key = "${device.id}:${alert.alertType.name}"
-                lastAlertedAt[key] = alert.triggeredAt
+                lastAlertedAt["${device.id}:${alert.alertType.name}"] = alert.triggeredAt
             }
         }
 
-        // Determine the active alert:
-        // - Clear current alert if its device has gone SIGNAL_LOST
-        // - Replace with newest alert if multiple triggered this cycle
         val currentAlert = _uiState.value.activeAlert
         val updatedAlert: PersistenceAlert? = when {
             currentAlert != null && deviceIsSignalLost(devices, currentAlert.deviceId) -> null
@@ -123,7 +112,9 @@ class ScanViewModel @Inject constructor(
             else -> currentAlert
         }
 
-        _uiState.update { it.copy(devices = devices, activeAlert = updatedAlert) }
+        _uiState.update {
+            it.copy(devices = devices, activeAlert = updatedAlert, deviceMatchScores = matchScores)
+        }
     }
 
     private fun deviceIsSignalLost(devices: List<ObservedDevice>, deviceId: String): Boolean =

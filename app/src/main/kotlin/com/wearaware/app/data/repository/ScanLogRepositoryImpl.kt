@@ -5,6 +5,7 @@ import com.wearaware.app.data.mapper.toScanLogEntity
 import com.wearaware.app.data.mapper.toDomain
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.ScanLogEntry
+import com.wearaware.app.domain.model.TargetMatchResult
 import com.wearaware.app.domain.repository.ScanLogRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -22,7 +23,7 @@ class ScanLogRepositoryImpl @Inject constructor(
 ) : ScanLogRepository {
 
     /** Logs a detection event by mapping ObservedDevice to a Room entity and inserting it. */
-    override suspend fun log(device: ObservedDevice) {
+    override suspend fun log(device: ObservedDevice, matchResult: TargetMatchResult?) {
         dao.insert(device.toScanLogEntity())
     }
 
