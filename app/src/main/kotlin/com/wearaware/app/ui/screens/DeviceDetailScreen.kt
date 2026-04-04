@@ -20,6 +20,7 @@ import com.wearaware.app.ui.viewmodel.ScanViewModel
 import com.wearaware.app.util.formatDuration
 import com.wearaware.app.util.formatFullTimestamp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeviceDetailScreen(
     deviceId: String,

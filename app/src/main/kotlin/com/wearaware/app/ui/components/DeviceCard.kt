@@ -3,7 +3,7 @@ package com.wearaware.app.ui.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.wearaware.app.domain.model.DeviceCategory
 import com.wearaware.app.domain.model.ObservedDevice
-import com.wearaware.app.util.FormatUtils
+import com.wearaware.app.util.formatDuration
 
 @Composable
 fun DeviceCard(
@@ -61,14 +61,14 @@ fun DeviceCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Seen: ${FormatUtils.formatDuration(device.seenDurationMs)}",
+                    text = "Seen: ${device.seenDurationMs.formatDuration()}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             Icon(
-                imageVector = Icons.Default.ChevronRight,
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "View device details",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )

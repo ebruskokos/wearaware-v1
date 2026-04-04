@@ -13,6 +13,7 @@ import com.wearaware.app.ui.components.*
 import com.wearaware.app.ui.viewmodel.ScanState
 import com.wearaware.app.ui.viewmodel.ScanViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanScreen(
     onDeviceClick: (String) -> Unit,
@@ -96,7 +97,7 @@ fun ScanScreen(
                 text = SafeWording.DISCLAIMER,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, bottom = 8.dp)
+                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)
             )
         }
     }

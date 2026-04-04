@@ -16,6 +16,7 @@ import com.wearaware.app.domain.model.ScanLogEntry
 import com.wearaware.app.ui.viewmodel.SessionLogViewModel
 import com.wearaware.app.util.formatFullTimestamp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionLogScreen(
     onBack: () -> Unit,
