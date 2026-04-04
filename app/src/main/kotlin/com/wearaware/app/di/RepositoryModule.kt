@@ -1,0 +1,30 @@
+package com.wearaware.app.di
+
+import com.wearaware.app.data.repository.BleRepositoryImpl
+import com.wearaware.app.data.repository.ScanLogRepositoryImpl
+import com.wearaware.app.domain.repository.BleRepository
+import com.wearaware.app.domain.repository.ScanLogRepository
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
+
+/**
+ * PURPOSE: Binds data layer implementations to their domain repository interfaces.
+ *   The domain layer depends on interfaces; the data layer provides implementations.
+ * NOTES: @Binds is preferred over @Provides for interface-to-implementation binding
+ *   because it generates less code and is more efficient.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class RepositoryModule {
+
+    @Binds
+    @Singleton
+    abstract fun bindBleRepository(impl: BleRepositoryImpl): BleRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindScanLogRepository(impl: ScanLogRepositoryImpl): ScanLogRepository
+}
