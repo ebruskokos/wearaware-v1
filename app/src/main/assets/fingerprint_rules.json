@@ -1,0 +1,48 @@
+{
+  "rule_set_version": "1.0.0",
+  "rule_set_hash": "sha256:placeholder-update-after-file-is-finalized",
+  "rules": [
+    {
+      "rule_id": "meta_rayban_v1",
+      "enabled": true,
+      "priority": 100,
+      "min_score": 4,
+      "manufacturer_ids": ["0x0075"],
+      "name_patterns": ["Ray-Ban", "Meta", "Aria"],
+      "service_uuids": [],
+      "device_type_hint": "smart_glasses",
+      "category": "CAMERA_CAPABLE_WEARABLE",
+      "display_label": "Camera-capable wearable detected nearby",
+      "confidence": "HIGH",
+      "is_wearable_candidate": true
+    },
+    {
+      "rule_id": "snapchat_spectacles_v1",
+      "enabled": true,
+      "priority": 90,
+      "min_score": 2,
+      "manufacturer_ids": [],
+      "name_patterns": ["Spectacles", "Snap"],
+      "service_uuids": [],
+      "device_type_hint": "smart_glasses",
+      "category": "CAMERA_CAPABLE_WEARABLE",
+      "display_label": "Camera-capable wearable detected nearby",
+      "confidence": "MEDIUM",
+      "is_wearable_candidate": true
+    },
+    {
+      "rule_id": "generic_smartwatch_v1",
+      "enabled": true,
+      "priority": 50,
+      "min_score": 2,
+      "manufacturer_ids": [],
+      "name_patterns": ["Watch", "Band", "Fit", "Gear"],
+      "service_uuids": ["0000180d-0000-1000-8000-00805f9b34fb"],
+      "device_type_hint": "smartwatch",
+      "category": "SMARTWATCH",
+      "display_label": "Smartwatch or fitness band nearby",
+      "confidence": "LOW",
+      "is_wearable_candidate": true
+    }
+  ]
+}
