@@ -55,7 +55,7 @@ fun DeviceCard(
                 Spacer(modifier = Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    // Primary: advertised name, company name, or classification label
+                    // Primary display name
                     val displayName = device.advertisedName
                         ?: device.companyNames.firstOrNull()?.let { "$it device" }
                         ?: device.classification.displayLabel.ifBlank { null }
@@ -64,29 +64,52 @@ fun DeviceCard(
                         text = displayName,
                         style = MaterialTheme.typography.titleSmall
                     )
-                    // Manufacturer if known
+
+                    // Manufacturer name + company ID hex
                     if (device.companyNames.isNotEmpty()) {
+                        val companyIdHex = device.fingerprint?.manufacturerIds
+                            ?.firstOrNull()
+                            ?.let { "0x${it.toString(16).uppercase().padStart(4, '0')}" }
+                            ?: ""
+                        val manufacturerLine = if (companyIdHex.isNotEmpty())
+                            "${device.companyNames.joinToString(", ")}  $companyIdHex"
+                        else
+                            device.companyNames.joinToString(", ")
                         Text(
-                            text = device.companyNames.joinToString(", "),
+                            text = manufacturerLine,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    Text(
-                        text = device.classification.displayLabel,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+
+                    // Category label
+                    if (device.classification.displayLabel.isNotBlank()) {
+                        Text(
+                            text = device.classification.displayLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    // Signal label
                     Text(
                         text = device.proximityLabel.name.replace('_', ' ').lowercase()
-                            .replaceFirstChar { it.uppercase() },
+                            .replaceFirstChar { it.uppercase() } +
+                            "  ${device.averagedRssi} dBm",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    // Seen duration + BLE debug available indicator
+                    val seenText = "Seen: ${device.seenDurationMs.formatDuration()}"
+                    val bleIndicator = if (device.rawBleData != null) "  ◉ BLE" else ""
                     Text(
-                        text = "Seen: ${device.seenDurationMs.formatDuration()}",
+                        text = seenText + bleIndicator,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (device.rawBleData != null)
+                            MaterialTheme.colorScheme.tertiary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
