@@ -1,6 +1,7 @@
 package com.wearaware.app.data.repository
 
 import com.wearaware.app.data.ble.BleScanner
+import com.wearaware.app.data.ble.toFingerprint
 import com.wearaware.app.domain.model.*
 import com.wearaware.app.domain.repository.BleRepository
 import com.wearaware.app.domain.rules.FingerprintClassifier
@@ -13,31 +14,19 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * PURPOSE: Implements BleRepository by:
- *   1. Collecting raw scan results from BleScanner
- *   2. Aggregating per-device state (RSSI smoothing, first/last seen, count)
- *   3. Classifying each device via FingerprintClassifier
- *   4. Computing ProximityLabel and VisibilityState
- *   5. Expiring devices after REMOVE_AFTER_MS in SIGNAL_LOST state
- *   6. Emitting a sorted List<ObservedDevice> via StateFlow
+ * PURPOSE: Implements BleRepository:
+ *   1. Collects raw scan results from BleScanner
+ *   2. Computes a content-based fingerprint (hash of manufacturer data + UUIDs + name)
+ *   3. Aggregates per-device state keyed by fingerprintId
+ *   4. Classifies via FingerprintClassifier
+ *   5. Computes ProximityLabel and VisibilityState
+ *   6. Expires devices after REMOVE_AFTER_MS in SIGNAL_LOST state
+ *   7. Emits sorted List<ObservedDevice> via StateFlow
  *
- * CONTINUOUS PRESENCE RULE (named implementation requirement):
- *   Brief signal flickers shorter than SIGNAL_LOST_AFTER_MS must NOT reset firstSeenAt.
- *   A device is only removed from deviceStates (and firstSeenAt reset) after REMOVE_AFTER_MS
- *   in SIGNAL_LOST state. During a brief flicker, visibilityState == SIGNAL_LOST suppresses
- *   alert evaluation, but seenDurationMs (= lastSeenAt - firstSeenAt) keeps accumulating.
- *   This means a 60s alert threshold is satisfied by 60s of total session presence, not 60s
- *   of uninterrupted detection. This is intentional — minor environment-caused flickers
- *   should not invalidate a sustained nearby detection.
- *
- * LIMITATIONS:
- *   - Device fingerprint is based on BLE MAC address (may rotate per-session, Android 6+).
- *   - RSSI smoothing is per-session; state resets on stopScanning().
- *   - emitDeviceList() is called from two coroutines; ConcurrentHashMap ensures safety.
- *
- * NOTES: Classification happens here (data layer) but uses FingerprintClassifier
- *   (domain layer). Business meaning is assigned by domain rules, not here.
- *   The repositoryScope outlives individual scans — cleared on stopScanning().
+ * CONTINUOUS PRESENCE RULE:
+ *   Brief signal flickers < SIGNAL_LOST_AFTER_MS do NOT reset firstSeenAt.
+ *   Device removed only after REMOVE_AFTER_MS in SIGNAL_LOST. This means
+ *   seenDurationMs accumulates over brief gaps — intentional design for real-world BLE noise.
  */
 @Singleton
 class BleRepositoryImpl @Inject constructor(
@@ -47,6 +36,8 @@ class BleRepositoryImpl @Inject constructor(
 
     private data class DeviceState(
         val smoother: RssiSmoother = RssiSmoother(),
+        val macAddress: String,
+        val fingerprint: DeviceFingerprint,
         val firstSeenAt: Long,
         var lastSeenAt: Long,
         var seenCount: Int = 1,
@@ -59,11 +50,8 @@ class BleRepositoryImpl @Inject constructor(
     )
 
     private val deviceStates = ConcurrentHashMap<String, DeviceState>()
-
     private val _observedDevices = MutableStateFlow<List<ObservedDevice>>(emptyList())
-    override val observedDevices: StateFlow<List<ObservedDevice>> =
-        _observedDevices.asStateFlow()
-
+    override val observedDevices: StateFlow<List<ObservedDevice>> = _observedDevices.asStateFlow()
     override val isBleAvailable: Boolean get() = bleScanner.isBleAvailable
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -101,9 +89,10 @@ class BleRepositoryImpl @Inject constructor(
     }
 
     private fun processRawScanResult(raw: RawScanResult) {
-        val fingerprint = raw.toDeviceFingerprint()
+        val fp = raw.toFingerprint()
+        val key = fp.fingerprintId
         val now = System.currentTimeMillis()
-        val existing = deviceStates[fingerprint]
+        val existing = deviceStates[key]
 
         if (existing != null) {
             existing.lastSeenAt = now
@@ -112,8 +101,10 @@ class BleRepositoryImpl @Inject constructor(
             existing.averagedRssi = existing.smoother.addReading(raw.rssi)
         } else {
             val smoother = RssiSmoother()
-            deviceStates[fingerprint] = DeviceState(
+            deviceStates[key] = DeviceState(
                 smoother = smoother,
+                macAddress = raw.address,
+                fingerprint = fp,
                 firstSeenAt = now,
                 lastSeenAt = now,
                 rawRssi = raw.rssi,
@@ -136,7 +127,7 @@ class BleRepositoryImpl @Inject constructor(
     private fun emitDeviceList() {
         val now = System.currentTimeMillis()
         val devices = deviceStates.entries
-            .map { (fingerprint, state) ->
+            .map { (fingerprintId, state) ->
                 val visibilityState =
                     if (now - state.lastSeenAt > ProximityConfig.SIGNAL_LOST_AFTER_MS)
                         VisibilityState.SIGNAL_LOST
@@ -144,7 +135,7 @@ class BleRepositoryImpl @Inject constructor(
                         VisibilityState.DETECTED_NOW
 
                 val rawScanForClassification = RawScanResult(
-                    address = fingerprint,
+                    address = state.macAddress,
                     advertisedName = state.advertisedName,
                     bluetoothDeviceName = null,
                     rssi = state.rawRssi,
@@ -161,7 +152,7 @@ class BleRepositoryImpl @Inject constructor(
                 val classification = classifier.classify(rawScanForClassification)
 
                 ObservedDevice(
-                    id = fingerprint,
+                    id = fingerprintId,
                     advertisedName = state.advertisedName,
                     rawRssi = state.rawRssi,
                     averagedRssi = state.averagedRssi,
@@ -171,18 +162,14 @@ class BleRepositoryImpl @Inject constructor(
                     lastSeenAt = state.lastSeenAt,
                     seenCount = state.seenCount,
                     classification = classification,
-                    persistenceAlert = null
+                    persistenceAlert = null,
+                    macAddress = state.macAddress,
+                    fingerprint = state.fingerprint,
+                    companyNames = state.fingerprint.manufacturerNames
                 )
             }
             .sortedByDescending { it.averagedRssi }
 
         _observedDevices.value = devices
     }
-
-    /**
-     * Derives a session-scoped device fingerprint from the BLE MAC address.
-     * NOTE: On Android 6+, MAC addresses are randomized per-session.
-     * Future improvement: incorporate manufacturer data hash + name for stability.
-     */
-    private fun RawScanResult.toDeviceFingerprint(): String = address
 }
