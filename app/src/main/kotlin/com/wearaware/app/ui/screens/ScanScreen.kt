@@ -9,17 +9,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.wearaware.app.ui.components.*
 import com.wearaware.app.ui.viewmodel.ScanState
 import com.wearaware.app.ui.viewmodel.ScanViewModel
+import com.wearaware.app.util.PermissionUtils
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ScanScreen(
     onDeviceClick: (String) -> Unit,
     viewModel: ScanViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    val permissionsState = rememberMultiplePermissionsState(
+        permissions = PermissionUtils.BLE_PERMISSIONS.toList()
+    ) { results ->
+        if (PermissionUtils.allGranted(results)) {
+            viewModel.startScanning()
+        } else {
+            viewModel.setPermissionsRequired()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -82,8 +95,11 @@ fun ScanScreen(
             Spacer(modifier = Modifier.weight(1f))
             Button(
                 onClick = {
-                    if (uiState.scanState == ScanState.SCANNING) viewModel.stopScanning()
-                    else viewModel.startScanning()
+                    when {
+                        uiState.scanState == ScanState.SCANNING -> viewModel.stopScanning()
+                        permissionsState.allPermissionsGranted -> viewModel.startScanning()
+                        else -> permissionsState.launchMultiplePermissionRequest()
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
