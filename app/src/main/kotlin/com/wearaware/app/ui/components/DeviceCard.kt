@@ -43,7 +43,7 @@ fun DeviceCard(
             // Device info
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = device.advertisedName ?: "Unknown Device",
+                    text = device.advertisedName ?: device.id.takeLast(17),
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(

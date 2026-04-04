@@ -61,6 +61,19 @@ fun DeviceDetailScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Device identity
+            Text(
+                text = device.advertisedName ?: "No advertised name",
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = "MAC: ${device.id}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            HorizontalDivider()
+
             // Signal + visibility
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SignalBars(proximity = device.proximityLabel)

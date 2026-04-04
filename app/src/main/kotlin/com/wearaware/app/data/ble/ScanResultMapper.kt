@@ -22,7 +22,7 @@ fun ScanResult.toRawScanResult(): RawScanResult {
     }
     return RawScanResult(
         address = device.address,
-        advertisedName = record?.deviceName,
+        advertisedName = record?.deviceName ?: device.name,
         rssi = rssi,
         manufacturerData = manufacturerData,
         serviceUuids = record?.serviceUuids?.map { it.uuid.toString().lowercase() }
