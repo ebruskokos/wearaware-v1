@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.wearaware.app.domain.model.DeviceCategory
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.util.formatDuration
 
@@ -43,14 +42,13 @@ fun DeviceCard(
             // Device info
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = device.advertisedName ?: device.id.takeLast(17),
+                    text = device.advertisedName
+                        ?: device.classification.matchedRuleId?.let { device.classification.displayLabel }
+                        ?: "BLE Device",
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(
-                    text = if (device.classification.category == DeviceCategory.UNKNOWN_BLE_DEVICE)
-                        SafeWording.UNKNOWN_DEVICE
-                    else
-                        device.classification.displayLabel,
+                    text = device.classification.displayLabel,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
