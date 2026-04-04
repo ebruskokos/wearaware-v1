@@ -5,29 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [1.0.0] - 2026-04-03
 
 ### Added
-- Initial project scaffolding
-- PRD v1.0
-- Documentation structure (ADR, SECURITY, COMPLIANCE, LOGGING, TESTING, DECISIONS)
-
----
-
-## [1.0.0] — Unreleased
-
-### Added
-- BLE scanning pipeline (in-app only)
+- BLE scanner with rolling RSSI smoothing (window=5)
 - Config-driven fingerprint rule engine (fingerprint_rules.json v1.0.0)
-- RSSI smoothing (rolling average, window=5)
-- Proximity labels: VERY_CLOSE, STRONG, NEARBY, WEAK, UNKNOWN
-- Signal bars UI (1–5 bars, color-coded)
-- Device list with sort-by-signal
-- Persistence alert system (60s threshold, NEARBY+ proximity gate)
-- Local session log (Room, on-device, user-clearable)
-- Safe wording — no recording claims, no following claims
-- SOC2-aligned documentation
+- Three fingerprint rules: Ray-Ban Meta, Snapchat Spectacles, generic smartwatch
+- Persistence alert system (60s threshold, 120s cooldown, 6-gate evaluation)
+- Session log with Room database (local only, no PII)
+- Clean Architecture: UI → Domain → Data (pure Kotlin domain layer)
+- SafeWording centralization — all alert/disclaimer strings in one object
+- Accessibility: signal bars with content descriptions, color not sole indicator
+- Hilt dependency injection throughout
 
 ### Rule Set
 - rule_set_version: 1.0.0
-- Initial rules: meta_rayban_v1, snapchat_spectacles_v1, generic_smartwatch_v1
+- rule_set_hash: sha256:placeholder-update-after-file-is-finalized — update with actual hash from fingerprint_rules.json
+
+### Known Limitations
+- Gradle wrapper JAR must be generated before building: `gradle wrapper --gradle-version 8.2`
+- Device identifiers are session-scoped (BLE MAC randomization)
+- Proximity is estimated, not measured
+- Physical Meta Ray-Ban testing pending (see docs/TESTING/meta-glasses-test-plan.md)
+- Unit tests: 48 tests across 6 files (ProximityConfig×8, RssiSmoother×8, ObservedDevice×3, FingerprintClassifier×11, ScanLogMapper×4, EvaluatePersistence×14)

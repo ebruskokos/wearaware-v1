@@ -1,5 +1,13 @@
 # WearAware — Meta Ray-Ban Glasses Test Plan
 
+## Test Status
+
+**Status:** Pending physical device testing  
+**Gate:** Unit tests (48 tests across 6 files) must pass before physical testing begins  
+**When to run:** After `./gradlew :app:test` passes on a development machine  
+**Device required:** Meta Ray-Ban smart glasses (primary test target)  
+**Instructions:** Follow the test scenarios below with device in hand  
+
 **Version:** 1.0  
 **Date:** 2026-04-03  
 **Target Device:** Ray-Ban Meta Smart Glasses (1st or 2nd gen)

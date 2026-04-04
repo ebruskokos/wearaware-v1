@@ -44,8 +44,27 @@ It provides proximity estimates and awareness — nothing more.
 
 ---
 
+## Signal Strength Thresholds
+
+Signal strength thresholds (averaged RSSI):
+
+```
+≥ -55 dBm  → VERY_CLOSE (5 bars, red)
+≥ -65 dBm  → STRONG     (4 bars, orange)
+≥ -75 dBm  → NEARBY     (3 bars, yellow)
+≥ -85 dBm  → WEAK       (2 bars, grey)
+< -85 dBm  → UNKNOWN    (1 bar, grey)
+```
+
+Rolling average window: 5 readings (configurable via ProximityConfig)  
+Signal lost after: 15,000 ms  
+Device removed after: 30,000 ms in SIGNAL_LOST state  
+
+---
+
 ## Known Limitations
 
+- Gradle wrapper JAR not bundled — run `gradle wrapper --gradle-version 8.2` before first build
 - Device identifiers are session-scoped due to BLE MAC address randomization (Android 6+).
   The same physical device may appear with a different ID across app sessions.
 - Proximity is estimated, not measured. BLE RSSI varies significantly with environment.
