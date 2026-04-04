@@ -30,7 +30,9 @@ fun TargetMatchBanner(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (bestMatch == null || bestMatch.second.confidence == MatchConfidence.NONE) {
+            if (bestMatch == null ||
+                bestMatch.second.confidence == MatchConfidence.NONE ||
+                bestMatch.second.confidence == MatchConfidence.LOW) {
                 Text(
                     text = "No strong match for your target device yet",
                     style = MaterialTheme.typography.bodySmall,

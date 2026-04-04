@@ -106,4 +106,80 @@ class MatchTargetDeviceUseCaseTest {
         val result = useCase(listOf(device), profile)[device.id]!!
         assertTrue(result.matchedSignals.any { it.contains("Persistent") })
     }
+
+    @Test
+    fun `generic BLE device with no identity signals gets NONE even when it is the only device`() {
+        // LEDBLE-0038ED type: unknown manufacturer, UNKNOWN_BLE_DEVICE, no Wayfarer name
+        val device = makeDevice(
+            id = "ledble1",
+            name = "LEDBLE-0038ED",
+            category = DeviceCategory.UNKNOWN_BLE_DEVICE,
+            seenDurationMs = 120_000L  // persistence bonus should be irrelevant
+        )
+        val results = useCase(listOf(device), profile)
+        val result = results[device.id]!!
+        assertEquals("No identity signal — must be NONE", MatchConfidence.NONE, result.confidence)
+        assertEquals("Score must be 0 for ineligible device", 0, result.score)
+        assertFalse("Ineligible device must not be top candidate", result.isTopCandidate)
+    }
+
+    @Test
+    fun `LOW confidence device is never marked as top candidate`() {
+        // SMART_GLASSES classification alone = 3 pts = LOW
+        val device = makeDevice(
+            id = "sg1",
+            category = DeviceCategory.SMART_GLASSES
+            // no name, no Meta rule → eligible but score = 3 = LOW
+        )
+        val results = useCase(listOf(device), profile)
+        val result = results[device.id]!!
+        assertEquals("SMART_GLASSES only should give LOW", MatchConfidence.LOW, result.confidence)
+        assertFalse("LOW confidence device must not become top candidate", result.isTopCandidate)
+    }
+
+    @Test
+    fun `persistence and UUID alone without identity signal are not enough to become a candidate`() {
+        // A device with only bonus signals — no name hint, no Meta, no wearable class
+        val device = makeDevice(
+            id = "generic2",
+            category = DeviceCategory.UNKNOWN_BLE_DEVICE,
+            seenDurationMs = 90_000L
+        )
+        val results = useCase(listOf(device), profile)
+        val result = results[device.id]!!
+        assertEquals(MatchConfidence.NONE, result.confidence)
+        assertTrue("No signals should be recorded for ineligible device", result.matchedSignals.isEmpty())
+        assertFalse(result.isTopCandidate)
+    }
+
+    @Test
+    fun `Meta company name in companyNames satisfies eligibility and adds to score`() {
+        val now = System.currentTimeMillis()
+        val device = ObservedDevice(
+            id = "meta_by_company_id",
+            advertisedName = null,
+            rawRssi = -60,
+            averagedRssi = -60,
+            proximityLabel = ProximityLabel.NEARBY,
+            visibilityState = VisibilityState.DETECTED_NOW,
+            firstSeenAt = now,
+            lastSeenAt = now,
+            seenCount = 1,
+            classification = ClassificationResult(
+                matchedRuleId = null,
+                ruleVersion = null,
+                category = DeviceCategory.UNKNOWN_BLE_DEVICE,
+                displayLabel = "Unknown",
+                confidence = ConfidenceLevel.LOW,
+                isWearableCandidate = false,
+                evaluationNotes = null
+            ),
+            persistenceAlert = null,
+            companyNames = listOf("Meta")
+        )
+        val results = useCase(listOf(device), profile)
+        val result = results[device.id]!!
+        assertTrue("Meta company ID should contribute +3 to score", result.score >= 3)
+        assertTrue(result.matchedSignals.any { it.contains("Manufacturer match") })
+    }
 }

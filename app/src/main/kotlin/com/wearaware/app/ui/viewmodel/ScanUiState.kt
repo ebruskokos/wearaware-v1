@@ -1,5 +1,6 @@
 package com.wearaware.app.ui.viewmodel
 
+import com.wearaware.app.domain.model.MatchConfidence
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.PersistenceAlert
 import com.wearaware.app.domain.model.TargetMatchResult
@@ -15,10 +16,16 @@ data class ScanUiState(
     val debugMode: Boolean = false,
     val deviceMatchScores: Map<String, TargetMatchResult> = emptyMap()
 ) {
-    /** Best-scoring candidate device paired with its match result, or null. */
+    /**
+     * Best-scoring candidate device paired with its match result, or null.
+     * Only MEDIUM or HIGH confidence devices qualify — LOW and NONE are excluded.
+     */
     val bestMatch: Pair<ObservedDevice, TargetMatchResult>?
         get() {
-            val top = deviceMatchScores.values.firstOrNull { it.isTopCandidate } ?: return null
+            val top = deviceMatchScores.values.firstOrNull {
+                it.isTopCandidate &&
+                    (it.confidence == MatchConfidence.HIGH || it.confidence == MatchConfidence.MEDIUM)
+            } ?: return null
             val device = devices.find { it.id == top.deviceId } ?: return null
             return device to top
         }

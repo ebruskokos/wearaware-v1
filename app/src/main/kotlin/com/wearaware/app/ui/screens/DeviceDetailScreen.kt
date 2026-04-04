@@ -172,9 +172,11 @@ fun DeviceDetailScreen(
                     text = "Score: ${matchResult.score} • Confidence: ${matchResult.confidence.name}",
                     style = MaterialTheme.typography.bodySmall
                 )
-                if (matchResult.isTopCandidate) {
+                if (matchResult.isTopCandidate &&
+                    (matchResult.confidence == MatchConfidence.HIGH ||
+                        matchResult.confidence == MatchConfidence.MEDIUM)) {
                     Text(
-                        text = "★ Currently the best candidate for Wayfarer 00ZS",
+                        text = "★ Best current candidate for Wayfarer 00ZS",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
