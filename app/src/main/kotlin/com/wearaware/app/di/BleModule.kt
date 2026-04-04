@@ -3,6 +3,7 @@ package com.wearaware.app.di
 import com.wearaware.app.data.repository.RulesRepositoryImpl
 import com.wearaware.app.domain.repository.RulesRepository
 import com.wearaware.app.domain.rules.FingerprintClassifier
+import com.wearaware.app.util.AboutInfo
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,4 +29,15 @@ object BleModule {
     @Singleton
     fun provideFingerprintClassifier(rulesRepository: RulesRepository): FingerprintClassifier =
         FingerprintClassifier(rulesRepository.getRules())
+
+    @Provides
+    @Singleton
+    fun provideAboutInfo(rulesRepository: RulesRepository): AboutInfo {
+        val metadata = rulesRepository.getRules().metadata
+        return AboutInfo(
+            appVersion = "1.0.0",
+            ruleSetVersion = metadata.version,
+            ruleSetHash = metadata.hash
+        )
+    }
 }
