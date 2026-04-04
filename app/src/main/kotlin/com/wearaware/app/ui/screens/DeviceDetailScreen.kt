@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.wearaware.app.domain.model.BleDebugData
 import com.wearaware.app.domain.model.DeviceCategory
 import com.wearaware.app.domain.model.MatchConfidence
 import com.wearaware.app.domain.model.ObservedDevice
@@ -197,52 +198,139 @@ fun DeviceDetailScreen(
             if (uiState.debugMode) {
                 HorizontalDivider()
                 Text(
-                    "Debug Info",
+                    "Raw BLE Debug",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.tertiary
                 )
-                Text(
-                    text = "Fingerprint ID: ${device.id}",
-                    style = MaterialTheme.typography.labelSmall
-                )
-                Text(
-                    text = "MAC address: ${device.macAddress ?: "n/a"}",
-                    style = MaterialTheme.typography.labelSmall
-                )
+
+                // Identity
+                Text("Fingerprint ID: ${device.id}", style = MaterialTheme.typography.labelSmall)
+                Text("MAC address: ${device.macAddress ?: "n/a"}", style = MaterialTheme.typography.labelSmall)
+                Text("BT device name: ${device.fingerprint?.normalizedName ?: "n/a"}", style = MaterialTheme.typography.labelSmall)
+
+                // Manufacturer
                 val fp = device.fingerprint
                 if (fp != null) {
                     Text(
-                        text = "Manufacturer IDs: ${fp.manufacturerIds.map { "0x${it.toString(16).uppercase()}" }}",
+                        "Manufacturer IDs: ${fp.manufacturerIds.map { "0x${it.toString(16).uppercase().padStart(4, '0')}" }}",
                         style = MaterialTheme.typography.labelSmall
                     )
                     fp.manufacturerDataHex.forEach { (id, hex) ->
                         Text(
-                            text = "  0x${id.toString(16).uppercase()}: $hex",
+                            "  0x${id.toString(16).uppercase().padStart(4, '0')}: $hex",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    if (fp.serviceUuids.isNotEmpty()) {
-                        Text("Service UUIDs:", style = MaterialTheme.typography.labelSmall)
-                        fp.serviceUuids.forEach { uuid ->
+                }
+
+                // Service UUIDs
+                if (fp?.serviceUuids?.isNotEmpty() == true) {
+                    Text("Service UUIDs:", style = MaterialTheme.typography.labelSmall)
+                    fp.serviceUuids.forEach { uuid ->
+                        Text(
+                            "  $uuid",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // TX Power
+                fp?.txPower?.let { Text("TX Power: $it dBm", style = MaterialTheme.typography.labelSmall) }
+
+                // BleDebugData fields
+                val dbg = device.rawBleData
+                if (dbg != null) {
+                    Text(
+                        "Connectable: ${dbg.isConnectable}",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    dbg.advertisingFlags?.let {
+                        Text(
+                            "Advertising flags: 0x${it.toString(16).uppercase()}",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+
+                    // Solicitation UUIDs
+                    if (dbg.serviceSolicitationUuids.isNotEmpty()) {
+                        Text("Solicitation UUIDs:", style = MaterialTheme.typography.labelSmall)
+                        dbg.serviceSolicitationUuids.forEach { uuid ->
                             Text(
-                                text = "  $uuid",
+                                "  $uuid",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                    fp.txPower?.let {
-                        Text("TX Power: $it dBm", style = MaterialTheme.typography.labelSmall)
+
+                    // Service data
+                    if (dbg.serviceDataHex.isNotEmpty()) {
+                        Text("Service data:", style = MaterialTheme.typography.labelSmall)
+                        dbg.serviceDataHex.forEach { (uuid, hex) ->
+                            Text(
+                                "  $uuid: $hex",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
+
+                    // PHY + timing
+                    if (dbg.primaryPhy != 0) {
+                        Text(
+                            "PHY: primary=${dbg.primaryPhy} secondary=${dbg.secondaryPhy}",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                    if (dbg.advertisingSid != 255 && dbg.advertisingSid != 0) {
+                        Text("Advertising SID: ${dbg.advertisingSid}", style = MaterialTheme.typography.labelSmall)
+                    }
+                    if (dbg.periodicAdvertisingInterval != 0) {
+                        Text(
+                            "Periodic interval: ${dbg.periodicAdvertisingInterval} × 1.25ms",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                    Text(
+                        "Device type: ${dbg.deviceType}  Bond state: ${dbg.bondState}",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    if (dbg.timestampNanos != 0L) {
+                        Text(
+                            "Timestamp (nanos since boot): ${dbg.timestampNanos}",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+
+                    // Raw scan bytes
+                    dbg.rawScanBytesHex?.let { hex ->
+                        Text("Raw scan bytes:", style = MaterialTheme.typography.labelSmall)
+                        // Show max 64 chars then "..." to avoid overwhelming the screen
+                        val preview = if (hex.length > 64) hex.take(64) + "…" else hex
+                        Text(
+                            preview,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    Text(
+                        "Raw BLE debug data unavailable for this device",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
+
+                // Classification + match
                 Text(
-                    text = "Classification rule: ${device.classification.matchedRuleId ?: "none"}",
+                    "Classification rule: ${device.classification.matchedRuleId ?: "none"}",
                     style = MaterialTheme.typography.labelSmall
                 )
                 matchResult?.let {
                     Text(
-                        text = "Target match score: ${it.score} (${it.confidence.name})",
+                        "Target match score: ${it.score} (${it.confidence.name})",
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
