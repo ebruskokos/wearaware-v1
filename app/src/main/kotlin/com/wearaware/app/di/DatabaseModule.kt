@@ -2,6 +2,7 @@ package com.wearaware.app.di
 
 import android.content.Context
 import androidx.room.Room
+import com.wearaware.app.data.local.CaptureDao
 import com.wearaware.app.data.local.ScanLogDao
 import com.wearaware.app.data.local.WearAwareDatabase
 import dagger.Module
@@ -31,4 +32,8 @@ object DatabaseModule {
     @Provides
     fun provideScanLogDao(database: WearAwareDatabase): ScanLogDao =
         database.scanLogDao()
+
+    @Provides
+    fun provideCaptureDao(database: WearAwareDatabase): CaptureDao =
+        database.captureDao()
 }
