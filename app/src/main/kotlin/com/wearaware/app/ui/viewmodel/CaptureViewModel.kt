@@ -5,20 +5,21 @@ import androidx.lifecycle.viewModelScope
 import com.wearaware.app.domain.model.*
 import com.wearaware.app.domain.repository.BleRepository
 import com.wearaware.app.domain.repository.CaptureRepository
-import com.wearaware.app.domain.repository.LearnedSignatureRepository
-import com.wearaware.app.domain.usecase.ClearLearnedSignatureUseCase
+import com.wearaware.app.domain.repository.KnownTargetRepository
 import com.wearaware.app.domain.usecase.CompareCapturesUseCase
 import com.wearaware.app.domain.usecase.DefaultTargetProfile
-import com.wearaware.app.domain.usecase.MatchLearnedSignatureUseCase
+import com.wearaware.app.domain.usecase.MatchKnownTargetSignatureUseCase
 import com.wearaware.app.domain.usecase.MatchTargetDeviceUseCase
-import com.wearaware.app.domain.usecase.SaveLearnedSignatureUseCase
+import com.wearaware.app.domain.usecase.SaveKnownTargetFromCaptureUseCase
 import com.wearaware.app.domain.usecase.extractPrefixesFromSummary
-import com.wearaware.app.domain.model.LearnedMatchInput
-import com.wearaware.app.domain.model.LearnedMatchResult
+import com.wearaware.app.domain.model.KnownTargetMatchInput
+import com.wearaware.app.domain.model.KnownTargetMatchResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 import javax.inject.Inject
 
@@ -28,10 +29,9 @@ class CaptureViewModel @Inject constructor(
     private val captureRepository: CaptureRepository,
     private val matchTargetDevice: MatchTargetDeviceUseCase,
     private val compareCapturesUseCase: CompareCapturesUseCase,
-    private val saveLearnedSignature: SaveLearnedSignatureUseCase,
-    private val matchLearnedSignature: MatchLearnedSignatureUseCase,
-    private val clearLearnedSignature: ClearLearnedSignatureUseCase,
-    private val learnedSignatureRepository: LearnedSignatureRepository,
+    private val saveKnownTarget: SaveKnownTargetFromCaptureUseCase,
+    private val matchKnownTarget: MatchKnownTargetSignatureUseCase,
+    private val knownTargetRepository: KnownTargetRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CaptureUiState())
@@ -54,15 +54,15 @@ class CaptureViewModel @Inject constructor(
         viewModelScope.launch {
             val baseline = captureRepository.getSession(CaptureType.BASELINE)
             val target = captureRepository.getSession(CaptureType.TARGET)
-            // Load learned signature first — runCompare reads it from state
-            val sig = learnedSignatureRepository.load()
+            // Load known target signature first — runCompare reads it from state
+            val sig = knownTargetRepository.load()
             _uiState.update {
                 it.copy(
                     baseline = baseline,
                     baselineCaptureState = if (baseline != null) CaptureState.DONE else CaptureState.IDLE,
                     target = target,
                     targetCaptureState = if (target != null) CaptureState.DONE else CaptureState.IDLE,
-                    learnedSignature = sig
+                    knownTargetSignature = sig
                 )
             }
             if (target != null) runCompare(baseline, target)
@@ -208,26 +208,26 @@ class CaptureViewModel @Inject constructor(
     fun learnDevice(fingerprintId: String) {
         val device = _uiState.value.target?.devices
             ?.firstOrNull { it.fingerprintId == fingerprintId } ?: return
-        val sig = saveLearnedSignature(device)
-        val matchResults = computeLearnedMatchesForCompare(sig, _uiState.value.compareResults)
-        _uiState.update {
-            it.copy(
-                learnedSignature = sig,
-                learnedMatchResults = matchResults,
-                learnSaveConfirmation = "Saved as My Meta Glasses"
-            )
-        }
         viewModelScope.launch {
+            val sig = withContext(Dispatchers.IO) { saveKnownTarget(device) }
+            val matchResults = computeKnownTargetMatchesForCompare(sig, _uiState.value.compareResults)
+            _uiState.update {
+                it.copy(
+                    knownTargetSignature = sig,
+                    learnedMatchResults = matchResults,
+                    learnSaveConfirmation = "Saved as My Meta Glasses"
+                )
+            }
             delay(3_000)
             _uiState.update { it.copy(learnSaveConfirmation = null) }
         }
     }
 
     fun clearLearnedDevice() {
-        clearLearnedSignature()
+        knownTargetRepository.clear()
         _uiState.update {
             it.copy(
-                learnedSignature = null,
+                knownTargetSignature = null,
                 learnedMatchResults = emptyMap()
             )
         }
@@ -281,9 +281,9 @@ class CaptureViewModel @Inject constructor(
 
     private suspend fun runCompare(baseline: CaptureSession?, target: CaptureSession) {
         val results = compareCapturesUseCase(baseline, target, DefaultTargetProfile.WAYFARER_00ZS)
-        val sig = _uiState.value.learnedSignature
+        val sig = _uiState.value.knownTargetSignature
         val matchResults = if (sig != null) {
-            computeLearnedMatchesForCompare(sig, results)
+            computeKnownTargetMatchesForCompare(sig, results)
         } else {
             emptyMap()
         }
@@ -295,22 +295,24 @@ class CaptureViewModel @Inject constructor(
         }
     }
 
-    private fun computeLearnedMatchesForCompare(
-        signature: com.wearaware.app.domain.model.LearnedDeviceSignature,
-        compareResults: List<com.wearaware.app.domain.model.CompareMatchResult>
-    ): Map<String, com.wearaware.app.domain.model.LearnedMatchResult> {
+    private fun computeKnownTargetMatchesForCompare(
+        signature: KnownTargetSignature,
+        compareResults: List<CompareMatchResult>
+    ): Map<String, KnownTargetMatchResult> {
         return compareResults.associate { result ->
             val device = result.capturedDevice
-            val input = LearnedMatchInput(
+            val input = KnownTargetMatchInput(
                 fingerprintId = device.fingerprintId,
                 manufacturerIds = device.manufacturerIds,
                 manufacturerDataPrefixes = extractPrefixesFromSummary(device.manufacturerDataSummary),
                 serviceUuids = device.serviceUuids,
+                gattServiceUuids = emptyList(),
                 averageRssi = device.averageRssi,
                 seenCount = device.seenCount,
-                visibleAtStop = device.visibleAtStop
+                visibleAtStop = device.visibleAtStop,
+                connectable = false
             )
-            device.fingerprintId to matchLearnedSignature(input, signature)
+            device.fingerprintId to matchKnownTarget(input, signature)
         }
     }
 }

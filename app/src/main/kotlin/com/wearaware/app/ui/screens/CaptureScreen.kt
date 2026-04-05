@@ -15,9 +15,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.wearaware.app.domain.model.CaptureType
 import com.wearaware.app.domain.model.CompareConfidence
 import com.wearaware.app.domain.model.CompareMatchResult
-import com.wearaware.app.domain.model.LearnedConfidence
-import com.wearaware.app.domain.model.LearnedDeviceSignature
-import com.wearaware.app.domain.model.LearnedMatchResult
+import com.wearaware.app.domain.model.KnownMatchConfidence
+import com.wearaware.app.domain.model.KnownTargetMatchResult
+import com.wearaware.app.domain.model.KnownTargetSignature
 import com.wearaware.app.ui.viewmodel.CaptureState
 import com.wearaware.app.ui.viewmodel.CaptureViewModel
 import com.wearaware.app.util.formatDuration
@@ -100,7 +100,7 @@ fun CaptureScreen(
                     results = uiState.compareResults,
                     hasBaseline = uiState.baseline != null,
                     onViewDevice = onViewDeviceDetail,
-                    learnedSignature = uiState.learnedSignature,
+                    learnedSignature = uiState.knownTargetSignature,
                     learnedMatchResults = uiState.learnedMatchResults,
                     onLearnDevice = { viewModel.learnDevice(it) },
                     onClearLearnedDevice = { viewModel.clearLearnedDevice() }
@@ -201,8 +201,8 @@ private fun CompareResultsSection(
     results: List<CompareMatchResult>,
     hasBaseline: Boolean,
     onViewDevice: (String) -> Unit,
-    learnedSignature: LearnedDeviceSignature?,
-    learnedMatchResults: Map<String, LearnedMatchResult>,
+    learnedSignature: KnownTargetSignature?,
+    learnedMatchResults: Map<String, KnownTargetMatchResult>,
     onLearnDevice: (String) -> Unit,
     onClearLearnedDevice: () -> Unit
 ) {
@@ -367,8 +367,8 @@ private fun CompareResultCard(
     isTopCandidate: Boolean,
     isFirstResult: Boolean = false,
     onViewDevice: (String) -> Unit,
-    learnedSignature: LearnedDeviceSignature?,
-    learnedMatchResult: LearnedMatchResult?,
+    learnedSignature: KnownTargetSignature?,
+    learnedMatchResult: KnownTargetMatchResult?,
     onLearnDevice: (String) -> Unit
 ) {
     val device = result.capturedDevice
@@ -433,8 +433,8 @@ private fun CompareResultCard(
 
             // Label override — learned match takes priority over raw BLE label
             val learnedLabel: String? = when (learnedMatchResult?.confidence) {
-                LearnedConfidence.STRONG -> learnedMatchResult.signature.displayName
-                LearnedConfidence.POSSIBLE -> "Possible match to your glasses"
+                KnownMatchConfidence.STRONG -> learnedMatchResult.signature.displayName
+                KnownMatchConfidence.POSSIBLE -> "Possible match to your glasses"
                 else -> null
             }
             val rawLabel = device.advertisedName

@@ -16,7 +16,7 @@ import com.wearaware.app.domain.model.CapturedDevice
 import com.wearaware.app.domain.model.CompareConfidence
 import com.wearaware.app.domain.model.CompareMatchResult
 import com.wearaware.app.domain.model.DeviceCategory
-import com.wearaware.app.domain.model.LearnedConfidence
+import com.wearaware.app.domain.model.KnownMatchConfidence
 import com.wearaware.app.ui.viewmodel.CaptureViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,7 +83,7 @@ fun CapturedDeviceDetailScreen(
             }
 
             // Learn this device button
-            val learnedSignature = uiState.learnedSignature
+            val learnedSignature = uiState.knownTargetSignature
             val alreadySaved = learnedSignature?.fingerprintId == device.fingerprintId
             Button(
                 onClick = { viewModel.learnDevice(device.fingerprintId) },
@@ -209,7 +209,7 @@ fun CapturedDeviceDetailScreen(
             // Learned signature match debug section
             HorizontalDivider()
             Text("Learned Signature Match", style = MaterialTheme.typography.titleSmall)
-            val learnedSignatureDebug = uiState.learnedSignature
+            val learnedSignatureDebug = uiState.knownTargetSignature
             if (learnedSignatureDebug == null) {
                 Text(
                     "Learned signature loaded: No",
@@ -230,9 +230,10 @@ fun CapturedDeviceDetailScreen(
                     )
                 } else {
                     val confidenceColor = when (learnedMatch.confidence) {
-                        LearnedConfidence.STRONG -> MaterialTheme.colorScheme.primary
-                        LearnedConfidence.POSSIBLE -> MaterialTheme.colorScheme.secondary
-                        LearnedConfidence.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
+                        KnownMatchConfidence.STRONG -> MaterialTheme.colorScheme.primary
+                        KnownMatchConfidence.POSSIBLE -> MaterialTheme.colorScheme.secondary
+                        KnownMatchConfidence.WEAK -> MaterialTheme.colorScheme.tertiary
+                        KnownMatchConfidence.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                     Text(
                         "Match confidence: ${learnedMatch.confidence.name} (score ${learnedMatch.score})",
