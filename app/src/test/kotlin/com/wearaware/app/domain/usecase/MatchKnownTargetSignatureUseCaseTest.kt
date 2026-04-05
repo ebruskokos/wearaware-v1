@@ -158,6 +158,35 @@ class MatchKnownTargetSignatureUseCaseTest {
         assertTrue(result.matchedSignals.any { it.contains("Manufacturer") })
         assertTrue(result.matchedSignals.any { it.contains("prefix") || it.contains("Prefix") })
         assertTrue(result.matchedSignals.any { it.contains("GATT") || it.contains("gatt") })
-        assertTrue(result.matchedSignals.any { it.contains("persistence") || it.contains("Persistence") || it.contains("50") })
+        assertTrue(result.matchedSignals.any { it.contains("persistence", ignoreCase = true) })
+    }
+
+    @Test
+    fun `seenCount exactly 50 earns high persistence bonus`() {
+        val withBonus = useCase(makeInput(seenCount = 50), makeSignature())
+        val withoutBonus = useCase(makeInput(seenCount = 49), makeSignature())
+        assertTrue(withBonus.matchedSignals.any { it.contains("persistence", ignoreCase = true) })
+        assertFalse(withoutBonus.matchedSignals.any { it.contains("persistence", ignoreCase = true) })
+    }
+
+    @Test
+    fun `seenCount exactly 5 does not trigger low persistence penalty`() {
+        val atBoundary = useCase(makeInput(seenCount = 5), makeSignature())
+        val belowBoundary = useCase(makeInput(seenCount = 4), makeSignature())
+        assertTrue(atBoundary.score > belowBoundary.score)
+    }
+
+    @Test
+    fun `averageRssi exactly -60 earns close proximity bonus`() {
+        val withBonus = useCase(makeInput(averageRssi = -60), makeSignature())
+        val withoutBonus = useCase(makeInput(averageRssi = -61), makeSignature())
+        assertTrue(withBonus.score > withoutBonus.score)
+    }
+
+    @Test
+    fun `averageRssi exactly -80 does not trigger weak signal penalty`() {
+        val atBoundary = useCase(makeInput(averageRssi = -80), makeSignature())
+        val belowBoundary = useCase(makeInput(averageRssi = -81), makeSignature())
+        assertTrue(atBoundary.score > belowBoundary.score)
     }
 }
