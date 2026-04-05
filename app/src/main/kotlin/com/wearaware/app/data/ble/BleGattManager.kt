@@ -44,6 +44,7 @@ class BleGattManagerImpl @Inject constructor(
 
                     override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
                         g.disconnect()
+                        if (!cont.isActive) return
                         if (status == BluetoothGatt.GATT_SUCCESS) {
                             val serviceUuids = g.services.map { it.uuid.toString() }
                             val charUuids = g.services.associate { s ->
