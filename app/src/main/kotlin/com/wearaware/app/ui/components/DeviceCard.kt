@@ -17,7 +17,7 @@ fun DeviceCard(
     device: ObservedDevice,
     onClick: () -> Unit,
     isTopCandidate: Boolean = false,
-    learnedMatchResult: com.wearaware.app.domain.model.LearnedMatchResult? = null,
+    learnedMatchResult: com.wearaware.app.domain.model.KnownTargetMatchResult? = null,
     modifier: Modifier = Modifier
 ) {
     val containerColor = if (isTopCandidate)
@@ -61,9 +61,9 @@ fun DeviceCard(
                         ?: device.companyNames.firstOrNull()?.let { "$it device" }
                         ?: "Unknown (${device.classification.category.name.replace('_', ' ')}) device"
                     val learnedLabel: String? = when (learnedMatchResult?.confidence) {
-                        com.wearaware.app.domain.model.LearnedConfidence.STRONG ->
+                        com.wearaware.app.domain.model.KnownMatchConfidence.STRONG ->
                             learnedMatchResult.signature.displayName
-                        com.wearaware.app.domain.model.LearnedConfidence.POSSIBLE ->
+                        com.wearaware.app.domain.model.KnownMatchConfidence.POSSIBLE ->
                             "Possible match to your glasses"
                         else -> null
                     }

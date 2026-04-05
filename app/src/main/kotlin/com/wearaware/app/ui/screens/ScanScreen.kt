@@ -97,7 +97,7 @@ fun ScanScreen(
             }
 
             // Learned device status chip
-            val learnedSig = uiState.learnedSignature
+            val learnedSig = uiState.knownTargetSignature
             if (learnedSig != null) {
                 SuggestionChip(
                     onClick = {},

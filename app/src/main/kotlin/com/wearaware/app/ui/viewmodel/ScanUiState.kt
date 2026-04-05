@@ -1,7 +1,7 @@
 package com.wearaware.app.ui.viewmodel
 
-import com.wearaware.app.domain.model.LearnedDeviceSignature
-import com.wearaware.app.domain.model.LearnedMatchResult
+import com.wearaware.app.domain.model.KnownTargetMatchResult
+import com.wearaware.app.domain.model.KnownTargetSignature
 import com.wearaware.app.domain.model.MatchConfidence
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.PersistenceAlert
@@ -19,14 +19,9 @@ data class ScanUiState(
     val debugMode: Boolean = false,
     val deviceMatchScores: Map<String, TargetMatchResult> = emptyMap(),
     val activeFilter: ScanFilter = ScanFilter.ALL,
-    val learnedSignature: LearnedDeviceSignature? = null,
-    /** Keyed by ObservedDevice.id. Updated on every device list tick. */
-    val learnedMatchResults: Map<String, LearnedMatchResult> = emptyMap(),
+    val knownTargetSignature: KnownTargetSignature? = null,
+    val learnedMatchResults: Map<String, KnownTargetMatchResult> = emptyMap(),
 ) {
-    /**
-     * Best-scoring candidate device paired with its match result, or null.
-     * Only MEDIUM or HIGH confidence devices qualify.
-     */
     val bestMatch: Pair<ObservedDevice, TargetMatchResult>?
         get() {
             val top = deviceMatchScores.values.firstOrNull {
@@ -37,10 +32,6 @@ data class ScanUiState(
             return device to top
         }
 
-    /**
-     * In focus mode: sorted by target match score descending.
-     * Otherwise: sorted by signal strength (from BleRepositoryImpl).
-     */
     val sortedDevices: List<ObservedDevice>
         get() = if (focusMode && deviceMatchScores.isNotEmpty()) {
             devices.sortedByDescending { deviceMatchScores[it.id]?.score ?: 0 }
@@ -48,10 +39,6 @@ data class ScanUiState(
             devices
         }
 
-    /**
-     * sortedDevices with the active filter applied.
-     * ScanScreen uses this for its LazyColumn.
-     */
     val filteredDevices: List<ObservedDevice>
         get() = sortedDevices.filter { activeFilter.matches(it) }
 }

@@ -2,17 +2,16 @@ package com.wearaware.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.wearaware.app.domain.model.LearnedMatchInput
-import com.wearaware.app.domain.model.LearnedMatchResult
+import com.wearaware.app.domain.model.KnownTargetMatchInput
+import com.wearaware.app.domain.model.KnownTargetMatchResult
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.PersistenceAlert
 import com.wearaware.app.domain.model.ScanFilter
 import com.wearaware.app.domain.model.VisibilityState
 import com.wearaware.app.domain.repository.BleRepository
-import com.wearaware.app.domain.repository.LearnedSignatureRepository
+import com.wearaware.app.domain.repository.KnownTargetRepository
 import com.wearaware.app.domain.usecase.*
-import com.wearaware.app.domain.usecase.MatchLearnedSignatureUseCase
-import com.wearaware.app.domain.usecase.extractPrefixesFromFingerprintMap
+import com.wearaware.app.domain.usecase.MatchKnownTargetSignatureUseCase
 import com.wearaware.app.util.AboutInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -27,8 +26,8 @@ class ScanViewModel @Inject constructor(
     private val matchTargetDevice: MatchTargetDeviceUseCase,
     private val bleRepository: BleRepository,
     aboutInfo: AboutInfo,
-    private val matchLearnedSignature: MatchLearnedSignatureUseCase,
-    private val learnedSignatureRepository: LearnedSignatureRepository,
+    private val matchKnownTarget: MatchKnownTargetSignatureUseCase,
+    private val knownTargetRepository: KnownTargetRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -45,10 +44,10 @@ class ScanViewModel @Inject constructor(
                 ruleSetHash = aboutInfo.ruleSetHash
             )
         }
-        val sig = learnedSignatureRepository.load()
+        val sig = knownTargetRepository.load()
         if (sig != null) {
-            val learnedMatches = computeLearnedMatches(_uiState.value.devices, sig)
-            _uiState.update { it.copy(learnedSignature = sig, learnedMatchResults = learnedMatches) }
+            val learnedMatches = computeKnownTargetMatches(_uiState.value.devices, sig)
+            _uiState.update { it.copy(knownTargetSignature = sig, learnedMatchResults = learnedMatches) }
         }
     }
 
@@ -106,29 +105,31 @@ class ScanViewModel @Inject constructor(
 
     /** Called from ScanScreen on composition to pick up signatures saved via CaptureScreen. */
     fun reloadLearnedSignature() {
-        val sig = learnedSignatureRepository.load()
-        val learnedMatches = computeLearnedMatches(_uiState.value.devices, sig)
-        _uiState.update { it.copy(learnedSignature = sig, learnedMatchResults = learnedMatches) }
+        val sig = knownTargetRepository.load()
+        val learnedMatches = computeKnownTargetMatches(_uiState.value.devices, sig)
+        _uiState.update { it.copy(knownTargetSignature = sig, learnedMatchResults = learnedMatches) }
     }
 
-    private fun computeLearnedMatches(
+    private fun computeKnownTargetMatches(
         devices: List<ObservedDevice>,
-        sig: com.wearaware.app.domain.model.LearnedDeviceSignature?
-    ): Map<String, LearnedMatchResult> {
+        sig: com.wearaware.app.domain.model.KnownTargetSignature?
+    ): Map<String, KnownTargetMatchResult> {
         if (sig == null) return emptyMap()
         return devices.associate { device ->
-            val input = LearnedMatchInput(
+            val input = KnownTargetMatchInput(
                 fingerprintId = device.id,
                 manufacturerIds = device.fingerprint?.manufacturerIds ?: emptyList(),
                 manufacturerDataPrefixes = extractPrefixesFromFingerprintMap(
                     device.fingerprint?.manufacturerDataHex
                 ),
                 serviceUuids = device.fingerprint?.serviceUuids ?: emptyList(),
+                gattServiceUuids = emptyList(),
                 averageRssi = device.averagedRssi,
                 seenCount = device.seenCount,
-                visibleAtStop = false  // live scan — visibleAtStop is a capture-only concept
+                visibleAtStop = false,
+                connectable = device.rawBleData?.isConnectable ?: false
             )
-            device.id to matchLearnedSignature(input, sig)
+            device.id to matchKnownTarget(input, sig)
         }
     }
 
@@ -158,7 +159,7 @@ class ScanViewModel @Inject constructor(
             else -> currentAlert
         }
 
-        val learnedMatches = computeLearnedMatches(devices, _uiState.value.learnedSignature)
+        val learnedMatches = computeKnownTargetMatches(devices, _uiState.value.knownTargetSignature)
 
         _uiState.update {
             it.copy(
