@@ -15,7 +15,9 @@ class CompareCapturesUseCaseTest {
         manufacturerIds: List<Int> = emptyList(),
         category: DeviceCategory = DeviceCategory.UNKNOWN_BLE_DEVICE,
         averageRssi: Int = -70,
-        seenCount: Int = 1
+        seenCount: Int = 1,
+        // Default false so existing score assertions are unaffected by the +1 visibleAtStop bonus
+        visibleAtStop: Boolean = false
     ): CapturedDevice = CapturedDevice(
         fingerprintId = id,
         advertisedName = name,
@@ -30,7 +32,7 @@ class CompareCapturesUseCaseTest {
         peakRssi = averageRssi,
         averageRssi = averageRssi,
         seenCount = seenCount,
-        visibleAtStop = true,
+        visibleAtStop = visibleAtStop,
         targetMatchScore = null,
         targetMatchSignals = emptyList()
     )
@@ -206,7 +208,7 @@ class CompareCapturesUseCaseTest {
             companyNames = listOf("Meta"),        // display only — must not affect score
             firstSeenInCapture = 0L, lastSeenInCapture = 0L,
             peakRssi = -70, averageRssi = -70,
-            seenCount = 1, visibleAtStop = true,
+            seenCount = 1, visibleAtStop = false,  // false so +1 bonus doesn't shift score assertion
             targetMatchScore = null, targetMatchSignals = emptyList()
         )
         val baseline = makeSession(CaptureType.BASELINE, emptyList())
@@ -258,6 +260,82 @@ class CompareCapturesUseCaseTest {
         val target = makeSession(CaptureType.TARGET, listOf(metaDevice, exactNameDevice))
         val results = useCase(baseline, target, profile)
         assertEquals("fp18", results[0].capturedDevice.fingerprintId)
+    }
+
+    // --- Apple suppression ---
+
+    @Test
+    fun `Apple-only device only in target is excluded to prevent list noise`() {
+        // Apple devices (iPhones, AirPods) are pervasive; appearing in the target scan is
+        // environmental noise, not evidence of being the target device.
+        val appleDevice = makeDevice("fpA1", manufacturerIds = listOf(0x004C))
+        val baseline = makeSession(CaptureType.BASELINE, emptyList())
+        val target = makeSession(CaptureType.TARGET, listOf(appleDevice))
+        val results = useCase(baseline, target, profile)
+        assertTrue(
+            "Apple-only device should be excluded (ungated bonus suppressed)",
+            results.none { it.capturedDevice.fingerprintId == "fpA1" }
+        )
+    }
+
+    @Test
+    fun `non-Apple unknown device only in target still gets ungated new-device signal`() {
+        // Suppression is Apple-specific; other unknown devices still earn LOW confidence
+        val unknownDevice = makeDevice("fpA2", manufacturerIds = listOf(0x1234))
+        val baseline = makeSession(CaptureType.BASELINE, emptyList())
+        val target = makeSession(CaptureType.TARGET, listOf(unknownDevice))
+        val results = useCase(baseline, target, profile)
+        val result = results.firstOrNull { it.capturedDevice.fingerprintId == "fpA2" }
+        assertNotNull("Non-Apple unknown device should appear in results", result)
+        assertEquals(3, result!!.score)
+        assertEquals(CompareConfidence.LOW, result.confidence)
+    }
+
+    @Test
+    fun `Apple device in both captures with RSSI delta still scores via delta signal`() {
+        // Suppression only blocks the "only in target" ungated bonus.
+        // An Apple device with a meaningful RSSI increase is still reportable.
+        val appleTarget = makeDevice("fpA3", manufacturerIds = listOf(0x004C), averageRssi = -55)
+        val appleBaseline = makeDevice("fpA3", manufacturerIds = listOf(0x004C), averageRssi = -70)
+        val target = makeSession(CaptureType.TARGET, listOf(appleTarget))
+        val baseline = makeSession(CaptureType.BASELINE, listOf(appleBaseline))
+        val results = useCase(baseline, target, profile)
+        val result = results.firstOrNull { it.capturedDevice.fingerprintId == "fpA3" }
+        assertNotNull("Apple device with RSSI delta should still appear", result)
+        assertEquals(4, result!!.score)  // +4 RSSI delta only
+        assertEquals(CompareConfidence.LOW, result.confidence)
+    }
+
+    // --- visibleAtStop bonus ---
+
+    @Test
+    fun `visibleAtStop adds 1 point bonus`() {
+        val deviceVisible = makeDevice("fpV1", manufacturerIds = listOf(0x0075), visibleAtStop = true)
+        val deviceGone = makeDevice("fpV2", manufacturerIds = listOf(0x0075), visibleAtStop = false)
+        val baseline = makeSession(CaptureType.BASELINE, emptyList())
+        val target = makeSession(CaptureType.TARGET, listOf(deviceVisible, deviceGone))
+        val results = useCase(baseline, target, profile)
+        val visibleResult = results.first { it.capturedDevice.fingerprintId == "fpV1" }
+        val goneResult = results.first { it.capturedDevice.fingerprintId == "fpV2" }
+        // Both: +8 (gated by Meta) + +3 (Meta); visible adds +1
+        assertEquals(12, visibleResult.score)
+        assertEquals(11, goneResult.score)
+        assertTrue(
+            "visibleAtStop signal should appear in comparisonSignals",
+            visibleResult.comparisonSignals.any { it.contains("Still advertising") }
+        )
+    }
+
+    @Test
+    fun `visibleAtStop does not add points when device was not visible at stop`() {
+        val device = makeDevice("fpV3", manufacturerIds = listOf(0x0075), visibleAtStop = false)
+        val baseline = makeSession(CaptureType.BASELINE, emptyList())
+        val target = makeSession(CaptureType.TARGET, listOf(device))
+        val results = useCase(baseline, target, profile)
+        val result = results.first()
+        // +8 (gated) + +3 (Meta) = 11 only
+        assertEquals(11, result.score)
+        assertTrue(result.comparisonSignals.none { it.contains("Still advertising") })
     }
 
     // --- seenInBaseline ---

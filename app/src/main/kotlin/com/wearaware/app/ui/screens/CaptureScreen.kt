@@ -120,6 +120,14 @@ private fun CaptureSection(
             Text(chipLabel, style = MaterialTheme.typography.labelSmall)
         })
 
+        if (captureState == CaptureState.CAPTURING) {
+            Text(
+                "Scan for at least 30 seconds for best results.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         if (captureState == CaptureState.DONE && durationMs != null) {
             Text(
                 "Captured ${deviceCount ?: 0} devices over ${durationMs.formatDuration()}",
@@ -162,7 +170,22 @@ private fun CompareResultsSection(
     val safeResults = results.toList()
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Compare Results", style = MaterialTheme.typography.titleSmall)
+        val headerText = if (safeResults.isEmpty()) {
+            "Compare Results"
+        } else {
+            val count = safeResults.size
+            "Compare Results — $count candidate${if (count == 1) "" else "s"}"
+        }
+        Text(headerText, style = MaterialTheme.typography.titleSmall)
+
+        if (safeResults.isNotEmpty() && safeResults.all { it.confidence == CompareConfidence.LOW }) {
+            Text(
+                "All results are LOW confidence — only weak differential evidence found. " +
+                    "Try a longer capture or move closer to your target device before powering it on.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         if (!hasBaseline) {
             Card(

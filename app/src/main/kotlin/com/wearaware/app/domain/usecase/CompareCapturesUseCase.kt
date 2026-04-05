@@ -4,6 +4,7 @@ import com.wearaware.app.domain.model.*
 import javax.inject.Inject
 
 private const val META_COMPANY_ID = 0x0075
+private const val APPLE_COMPANY_ID = 0x004C
 private const val RSSI_DELTA_THRESHOLD = 10
 
 /**
@@ -13,12 +14,16 @@ private const val RSSI_DELTA_THRESHOLD = 10
  * SCORING (additive):
  *   +8  only in target — gated: requires at least one identity signal
  *   +3  only in target — ungated: no identity signal (caps at LOW alone)
+ *         ⚠ Apple-only devices (0x004C, no other identity signal) are suppressed here.
+ *         Apple devices are pervasive; their appearance in a target scan is noise,
+ *         not evidence. They can still score via RSSI delta if present in both captures.
  *   +4  RSSI increased >= 10 dBm vs baseline
  *   +4  exact target name match (profile.friendlyName)
  *   +3  Meta manufacturer match (manufacturerIds contains 0x0075) — CANONICAL FIELD
  *   +3  SMART_GLASSES classification
  *   +2  CAMERA_CAPABLE_WEARABLE classification
  *   +2  partial profile hint (modelHint or brandHint in advertisedName)
+ *   +1  visibleAtStop: device was still advertising when capture was stopped
  *   +1  seenCount >= 5 during target capture
  *
  * CONFIDENCE: HIGH >= 9 | MEDIUM >= 6 | LOW >= 3 | NONE < 3 (excluded)
@@ -83,10 +88,15 @@ class CompareCapturesUseCase @Inject constructor() {
 
         // "Only in target" signals — require hasBaseline to avoid false positives
         if (baselineDevice == null && hasBaseline) {
+            // Apple-only: suppress the ungated bonus. Apple devices (iPhones, AirPods, etc.)
+            // are ubiquitous — their appearance in any target scan is environmental noise,
+            // not evidence of being the target device. They can still score via RSSI delta
+            // if present in both captures (meaningful) but not just by "appearing".
+            val isAppleOnly = device.manufacturerIds.contains(APPLE_COMPANY_ID) && !hasIdentitySignal
             if (hasIdentitySignal) {
                 score += 8
                 signals += "Only appeared when target was powered on"
-            } else {
+            } else if (!isAppleOnly) {
                 score += 3
                 signals += "New device: appeared during target capture (no identity signal)"
             }
@@ -123,6 +133,13 @@ class CompareCapturesUseCase @Inject constructor() {
         } else if (hasCameraCapable) {
             score += 2
             signals += "Classification: CAMERA_CAPABLE_WEARABLE"
+        }
+
+        // visibleAtStop bonus — device was still actively advertising when capture was stopped,
+        // meaning it stayed nearby for the full capture window (not a brief pass-by)
+        if (device.visibleAtStop) {
+            score += 1
+            signals += "Still advertising when capture stopped"
         }
 
         // Persistence bonus
