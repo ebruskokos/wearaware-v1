@@ -108,13 +108,74 @@ class MatchKnownTargetSignatureUseCaseTest {
     }
 
     @Test
-    fun `Apple-only manufacturer ID applies penalty`() {
-        // +6 apple mfr id match - 5 apple penalty = 1 → NONE
+    fun `Apple-only manufacturer ID applies standard penalty when signature is also Apple`() {
+        // Signature is Apple-only; standard -5 applies (not hard disqualification)
         val result = useCase(
             makeInput(manufacturerIds = listOf(0x004C)),
             makeSignature(manufacturerIds = listOf(0x004C), prefixes = emptyList(), serviceUuids = emptyList(), gattServiceUuids = emptyList())
         )
+        // +6 mfr match - 5 apple penalty = 1 → score < 2 → NONE or very low
         assertTrue("Apple penalty should reduce score", result.score < 6)
+    }
+
+    @Test
+    fun `Apple-only device vs non-Apple signature gets hard disqualification`() {
+        // Meta glasses signature; an Apple phone showing up should never match POSSIBLE/STRONG
+        val result = useCase(
+            makeInput(
+                manufacturerIds = listOf(0x004C),
+                seenCount = 60,         // would normally give +3 high persistence
+                averageRssi = -55,      // would normally give +3 close proximity
+                connectable = true      // would normally give +2
+            ),
+            makeSignature()  // sig has 0x0075 — non-Apple
+        )
+        // +6 (0x004C vs 0x0075 → no mfr ID overlap, so 0), -12 hard disqualification
+        // Actually 0x004C is NOT in sig.manufacturerIds (0x0075), so sharedIds = empty → no +6
+        // Then: +3 seenCount + +3 rssi + +2 connectable - 12 penalty = -4 → NONE
+        assertEquals(KnownMatchConfidence.NONE, result.confidence)
+        assertFalse(result.labelOverrideActive)
+    }
+
+    @Test
+    fun `Apple-only device near non-Apple signature never reaches POSSIBLE`() {
+        // Even with maximum proximity/persistence bonuses, Apple-only cannot reach POSSIBLE
+        // against a non-Apple signature
+        val result = useCase(
+            makeInput(
+                manufacturerIds = listOf(0x004C),
+                seenCount = 60,
+                averageRssi = -55,
+                connectable = true,
+                visibleAtStop = true
+            ),
+            makeSignature()
+        )
+        assertTrue(result.confidence == KnownMatchConfidence.NONE || result.confidence == KnownMatchConfidence.WEAK)
+        assertFalse("Apple device must not activate label override", result.labelOverrideActive)
+    }
+
+    @Test
+    fun `no structural signal prevents STRONG even with high score from proximity and persistence`() {
+        // A device with close proximity + high persistence + connectable + visible =
+        // +3 +3 +2 +2 = 10 pts — but no structural signal → cannot be STRONG
+        val result = useCase(
+            makeInput(
+                fingerprintId = "different-fp",
+                manufacturerIds = emptyList(),
+                prefixes = emptyList(),
+                serviceUuids = emptyList(),
+                gattServiceUuids = emptyList(),
+                averageRssi = -55,
+                seenCount = 60,
+                connectable = true,
+                visibleAtStop = true
+            ),
+            makeSignature()
+        )
+        // score = +3 +3 +2 +2 = 10, but no structural signal → capped at WEAK
+        assertTrue(result.confidence != KnownMatchConfidence.STRONG)
+        assertTrue(result.confidence != KnownMatchConfidence.POSSIBLE)
     }
 
     @Test

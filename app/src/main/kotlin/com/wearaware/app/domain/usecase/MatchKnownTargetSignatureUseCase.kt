@@ -100,10 +100,20 @@ class MatchKnownTargetSignatureUseCase @Inject constructor() {
 
         // --- Penalties ---
 
-        // -5 Apple-only noise filter
-        if (input.manufacturerIds.isNotEmpty() && input.manufacturerIds.all { it == 0x004C }) {
-            score -= 5
-            signals += "Apple-only manufacturer ID — noise filter (-5)"
+        val inputIsAppleOnly = input.manufacturerIds.isNotEmpty() &&
+            input.manufacturerIds.all { it == 0x004C }
+        val signatureHasNonApple = signature.manufacturerIds.any { it != 0x004C }
+
+        if (inputIsAppleOnly) {
+            if (signatureHasNonApple) {
+                // Learned device is non-Apple; Apple-only candidate is definitely wrong device
+                score -= 12
+                signals += "Apple-only device vs non-Apple signature — hard disqualification (-12)"
+            } else {
+                // Learned device might legitimately be Apple; standard noise penalty
+                score -= 5
+                signals += "Apple-only manufacturer ID — noise filter (-5)"
+            }
         }
 
         // -4 very weak signal
@@ -118,11 +128,20 @@ class MatchKnownTargetSignatureUseCase @Inject constructor() {
             signals += "Very low persistence: ${input.seenCount} observations (-3)"
         }
 
+        // Structural signals: fingerprint-based evidence (not purely proximity/persistence).
+        // STRONG/POSSIBLE require at least one structural signal to avoid false positives
+        // from any nearby persistent device (e.g. always-nearby phone).
+        val hasStructuralSignal = sharedIds.isNotEmpty() ||
+            matchedPrefixes.isNotEmpty() ||
+            sharedUuids.isNotEmpty() ||
+            sharedGattUuids.isNotEmpty() ||
+            input.fingerprintId == signature.fingerprintId
+
         val confidence = when {
-            score >= 8  -> KnownMatchConfidence.STRONG
-            score >= 4  -> KnownMatchConfidence.POSSIBLE
-            score >= 2  -> KnownMatchConfidence.WEAK
-            else        -> KnownMatchConfidence.NONE
+            score >= 8 && hasStructuralSignal -> KnownMatchConfidence.STRONG
+            score >= 4 && hasStructuralSignal -> KnownMatchConfidence.POSSIBLE
+            score >= 2 -> KnownMatchConfidence.WEAK
+            else -> KnownMatchConfidence.NONE
         }
 
         return KnownTargetMatchResult(
