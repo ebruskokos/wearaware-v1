@@ -90,12 +90,13 @@ fun ScanScreen(
             }
 
             // Learned device status chip
-            if (uiState.learnedSignature != null) {
+            val learnedSig = uiState.learnedSignature
+            if (learnedSig != null) {
                 SuggestionChip(
                     onClick = {},
                     label = {
                         Text(
-                            "${uiState.learnedSignature!!.displayName} profile active",
+                            "${learnedSig.displayName} profile active",
                             style = MaterialTheme.typography.labelSmall
                         )
                     },

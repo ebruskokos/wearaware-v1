@@ -54,9 +54,7 @@ fun CapturedDeviceDetailScreen(
                 modifier = Modifier.padding(innerPadding).fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) { Text("Device not found in captured sessions.") }
-            return@Scaffold
-        }
-
+        } else {
         Column(
             modifier = Modifier
                 .padding(innerPadding)
@@ -248,11 +246,13 @@ fun CapturedDeviceDetailScreen(
                     if (learnedMatch.matchedSignals.isNotEmpty()) {
                         Text("Matched signals:", style = MaterialTheme.typography.labelSmall)
                         learnedMatch.matchedSignals.forEach { signal ->
+                            key(signal) {
                             Text(
                                 "  • $signal",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            }
                         }
                     } else {
                         Text(
@@ -264,6 +264,7 @@ fun CapturedDeviceDetailScreen(
                 }
             }
         }
+        } // end else (device != null)
     }
 }
 
