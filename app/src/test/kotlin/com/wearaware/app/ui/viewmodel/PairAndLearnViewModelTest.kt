@@ -98,6 +98,7 @@ class PairAndLearnViewModelTest {
         coEvery { learningSessionRepository.createSession(any(), any()) } just Runs
         coEvery { learningSessionRepository.updateStatus(any(), any()) } just Runs
         coEvery { learningSessionRepository.updateDeviceAddress(any(), any()) } just Runs
+        coEvery { learningSessionRepository.updateFingerprintId(any(), any()) } just Runs
         coEvery { logLearningEvent(any(), any(), any()) } returns PairedLearningEvent(
             1L, "session", LearningEventType.SESSION_STARTED, 1000L, null
         )
@@ -107,6 +108,7 @@ class PairAndLearnViewModelTest {
 
         assertEquals(PairingFlowState.COMPLETED, viewModel.uiState.value.flowState)
         verify { knownTargetRepository.save(any()) }
+        coVerify { learningSessionRepository.updateFingerprintId(eq("session-1"), any()) }
     }
 
     @Test

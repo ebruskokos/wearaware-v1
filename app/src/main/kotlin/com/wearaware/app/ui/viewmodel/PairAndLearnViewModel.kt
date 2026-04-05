@@ -48,7 +48,8 @@ class PairAndLearnViewModel @Inject constructor(
             viewModelScope.launch {
                 val sessionId = _uiState.value.sessionId
                 if (sessionId != null) {
-                    logLearningEvent(sessionId, LearningEventType.CDM_FAILED, "User cancelled device picker")
+                    val event = logLearningEvent(sessionId, LearningEventType.CDM_FAILED, "User cancelled device picker")
+                    _uiState.update { it.copy(recentEvents = it.recentEvents + event) }
                     learningSessionRepository.updateStatus(sessionId, LearningSessionStatus.ABANDONED)
                 }
                 _uiState.update { it.copy(flowState = PairingFlowState.FAILED, errorMessage = "Pairing cancelled") }
@@ -63,7 +64,10 @@ class PairAndLearnViewModel @Inject constructor(
             _uiState.update { it.copy(flowState = PairingFlowState.FAILED, errorMessage = "No device address received") }
             return
         }
-        val sessionId = _uiState.value.sessionId ?: return
+        val sessionId = _uiState.value.sessionId ?: run {
+            _uiState.update { it.copy(flowState = PairingFlowState.FAILED, errorMessage = "Session not started") }
+            return
+        }
         onCdmAssociated(address, sessionId)
     }
 
@@ -73,18 +77,22 @@ class PairAndLearnViewModel @Inject constructor(
     fun onCdmAssociated(deviceAddress: String, sessionId: String) {
         viewModelScope.launch {
             try {
-                logLearningEvent(sessionId, LearningEventType.CDM_ASSOCIATED, "Device selected: $deviceAddress")
+                val cdmEvent = logLearningEvent(sessionId, LearningEventType.CDM_ASSOCIATED, "Device selected: $deviceAddress")
+                _uiState.update { it.copy(recentEvents = it.recentEvents + cdmEvent) }
                 learningSessionRepository.updateDeviceAddress(sessionId, deviceAddress)
 
                 _uiState.update { it.copy(flowState = PairingFlowState.GATT_CONNECTING, statusMessage = "Connecting to device...") }
-                logLearningEvent(sessionId, LearningEventType.GATT_CONNECTING, "Initiating GATT connection")
+                val gattConnectingEvent = logLearningEvent(sessionId, LearningEventType.GATT_CONNECTING, "Initiating GATT connection")
+                _uiState.update { it.copy(recentEvents = it.recentEvents + gattConnectingEvent) }
 
-                _uiState.update { it.copy(flowState = PairingFlowState.GATT_DISCOVERING, statusMessage = "Discovering services...") }
                 val gattResult = bleGattManager.connectAndDiscover(deviceAddress)
 
-                logLearningEvent(sessionId, LearningEventType.GATT_SERVICES_DISCOVERED,
+                _uiState.update { it.copy(flowState = PairingFlowState.GATT_DISCOVERING, statusMessage = "Discovering services...") }
+                val gattDiscoveredEvent = logLearningEvent(sessionId, LearningEventType.GATT_SERVICES_DISCOVERED,
                     "Discovered ${gattResult.serviceUuids.size} GATT services")
-                logLearningEvent(sessionId, LearningEventType.GATT_DISCONNECTED, "GATT disconnected after discovery")
+                _uiState.update { it.copy(recentEvents = it.recentEvents + gattDiscoveredEvent) }
+                val gattDisconnectedEvent = logLearningEvent(sessionId, LearningEventType.GATT_DISCONNECTED, "GATT disconnected after discovery")
+                _uiState.update { it.copy(recentEvents = it.recentEvents + gattDisconnectedEvent) }
 
                 _uiState.update { it.copy(flowState = PairingFlowState.LEARNING, statusMessage = "Building glasses profile...") }
 
@@ -94,9 +102,12 @@ class PairAndLearnViewModel @Inject constructor(
 
                 val signature = buildKnownTargetSignature(observedDevice, gattResult)
                 knownTargetRepository.save(signature)
+                learningSessionRepository.updateFingerprintId(sessionId, signature.fingerprintId)
 
-                logLearningEvent(sessionId, LearningEventType.SIGNATURE_BUILT, "Signature saved: ${signature.fingerprintId}")
-                logLearningEvent(sessionId, LearningEventType.SESSION_COMPLETED, "Learning session completed")
+                val signatureEvent = logLearningEvent(sessionId, LearningEventType.SIGNATURE_BUILT, "Signature saved: ${signature.fingerprintId}")
+                _uiState.update { it.copy(recentEvents = it.recentEvents + signatureEvent) }
+                val completedEvent = logLearningEvent(sessionId, LearningEventType.SESSION_COMPLETED, "Learning session completed")
+                _uiState.update { it.copy(recentEvents = it.recentEvents + completedEvent) }
                 learningSessionRepository.updateStatus(sessionId, LearningSessionStatus.COMPLETED)
 
                 _uiState.update {
@@ -107,7 +118,8 @@ class PairAndLearnViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                logLearningEvent(sessionId, LearningEventType.GATT_FAILED, "Error: ${e.message}")
+                val failedEvent = logLearningEvent(sessionId, LearningEventType.GATT_FAILED, "Error: ${e.message}")
+                _uiState.update { it.copy(recentEvents = it.recentEvents + failedEvent) }
                 learningSessionRepository.updateStatus(sessionId, LearningSessionStatus.FAILED)
                 _uiState.update {
                     it.copy(flowState = PairingFlowState.FAILED, errorMessage = "Connection failed: ${e.message}")
