@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -14,6 +15,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.wearaware.app.domain.model.CaptureType
 import com.wearaware.app.domain.model.CompareConfidence
 import com.wearaware.app.domain.model.CompareMatchResult
+import com.wearaware.app.domain.model.LearnedConfidence
+import com.wearaware.app.domain.model.LearnedDeviceSignature
+import com.wearaware.app.domain.model.LearnedMatchResult
 import com.wearaware.app.ui.viewmodel.CaptureState
 import com.wearaware.app.ui.viewmodel.CaptureViewModel
 import com.wearaware.app.util.formatDuration
@@ -26,6 +30,14 @@ fun CaptureScreen(
     viewModel: CaptureViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.learnSaveConfirmation) {
+        val msg = uiState.learnSaveConfirmation
+        if (msg != null) {
+            snackbarHostState.showSnackbar(msg)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -37,7 +49,8 @@ fun CaptureScreen(
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -86,7 +99,11 @@ fun CaptureScreen(
                 CompareResultsSection(
                     results = uiState.compareResults,
                     hasBaseline = uiState.baseline != null,
-                    onViewDevice = onViewDeviceDetail
+                    onViewDevice = onViewDeviceDetail,
+                    learnedSignature = uiState.learnedSignature,
+                    learnedMatchResults = uiState.learnedMatchResults,
+                    onLearnDevice = { viewModel.learnDevice(it) },
+                    onClearLearnedDevice = { viewModel.clearLearnedDevice() }
                 )
             }
         }
@@ -183,7 +200,11 @@ private fun CaptureSection(
 private fun CompareResultsSection(
     results: List<CompareMatchResult>,
     hasBaseline: Boolean,
-    onViewDevice: (String) -> Unit
+    onViewDevice: (String) -> Unit,
+    learnedSignature: LearnedDeviceSignature?,
+    learnedMatchResults: Map<String, LearnedMatchResult>,
+    onLearnDevice: (String) -> Unit,
+    onClearLearnedDevice: () -> Unit
 ) {
     // Snapshot to prevent list mutation during composition
     val safeResults = results.toList()
@@ -196,6 +217,41 @@ private fun CompareResultsSection(
             "Compare Results — $count candidate${if (count == 1) "" else "s"}"
         }
         Text(headerText, style = MaterialTheme.typography.titleSmall)
+
+        // Learned device status banner
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = if (learnedSignature != null)
+                    MaterialTheme.colorScheme.tertiaryContainer
+                else
+                    MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (learnedSignature != null)
+                        "Learned device profile: ${learnedSignature.displayName}"
+                    else
+                        "No learned glasses profile saved",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (learnedSignature != null)
+                        MaterialTheme.colorScheme.onTertiaryContainer
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                if (learnedSignature != null) {
+                    TextButton(onClick = onClearLearnedDevice) {
+                        Text("Clear", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
 
         // Compare summary — quick stats for validation
         if (safeResults.isNotEmpty()) {
@@ -247,7 +303,10 @@ private fun CompareResultsSection(
                     CompareResultCard(
                         result = result,
                         isTopCandidate = isTopCandidate,
-                        onViewDevice = onViewDevice
+                        onViewDevice = onViewDevice,
+                        learnedSignature = learnedSignature,
+                        learnedMatchResult = learnedMatchResults[result.capturedDevice.fingerprintId],
+                        onLearnDevice = onLearnDevice
                     )
                 }
             }
@@ -305,7 +364,10 @@ private fun CompareSummaryRow(results: List<CompareMatchResult>) {
 private fun CompareResultCard(
     result: CompareMatchResult,
     isTopCandidate: Boolean,
-    onViewDevice: (String) -> Unit
+    onViewDevice: (String) -> Unit,
+    learnedSignature: LearnedDeviceSignature?,
+    learnedMatchResult: LearnedMatchResult?,
+    onLearnDevice: (String) -> Unit
 ) {
     val device = result.capturedDevice
     Card(
@@ -367,10 +429,30 @@ private fun CompareResultCard(
                 )
             }
 
-            val displayName = device.advertisedName
+            // Label override — learned match takes priority over raw BLE label
+            val learnedLabel: String? = when (learnedMatchResult?.confidence) {
+                LearnedConfidence.STRONG -> learnedMatchResult.signature.displayName
+                LearnedConfidence.POSSIBLE -> "Possible match to your glasses"
+                else -> null
+            }
+            val rawLabel = device.advertisedName
                 ?: device.companyNames.firstOrNull()?.let { "$it device" }
                 ?: "Unknown BLE Device"
-            Text(displayName, style = MaterialTheme.typography.bodyMedium)
+
+            if (learnedLabel != null) {
+                Text(
+                    learnedLabel,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    rawLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(rawLabel, style = MaterialTheme.typography.bodyMedium)
+            }
 
             if (device.companyNames.isNotEmpty()) {
                 val idHex = device.manufacturerIds.firstOrNull()
@@ -444,6 +526,27 @@ private fun CompareResultCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("View Device Details")
+            }
+
+            // Learn button — shown on top candidate only, hidden if already saved
+            if (isTopCandidate) {
+                val alreadySaved = learnedSignature?.fingerprintId == device.fingerprintId
+                if (alreadySaved) {
+                    Text(
+                        "✓ Saved as learned device",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = { onLearnDevice(device.fingerprintId) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Learn this device — This is my glasses")
+                    }
+                }
             }
         }
     }
