@@ -17,6 +17,7 @@ fun DeviceCard(
     device: ObservedDevice,
     onClick: () -> Unit,
     isTopCandidate: Boolean = false,
+    learnedMatchResult: com.wearaware.app.domain.model.LearnedMatchResult? = null,
     modifier: Modifier = Modifier
 ) {
     val containerColor = if (isTopCandidate)
@@ -55,15 +56,25 @@ fun DeviceCard(
                 Spacer(modifier = Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    // Primary display name
-                    val displayName = device.advertisedName
+                    // Primary display label — learned match overrides raw BLE label
+                    val rawLabel = device.advertisedName
                         ?: device.companyNames.firstOrNull()?.let { "$it device" }
-                        ?: device.classification.displayLabel.ifBlank { null }
-                        ?: "BLE Device"
-                    Text(
-                        text = displayName,
-                        style = MaterialTheme.typography.titleSmall
-                    )
+                        ?: "Unknown (${device.classification.category.name.replace('_', ' ')}) device"
+                    val learnedLabel: String? = when (learnedMatchResult?.confidence) {
+                        com.wearaware.app.domain.model.LearnedConfidence.STRONG ->
+                            learnedMatchResult.signature.displayName
+                        com.wearaware.app.domain.model.LearnedConfidence.POSSIBLE ->
+                            "Possible match to your glasses"
+                        else -> null
+                    }
+                    if (learnedLabel != null) {
+                        Text(learnedLabel, style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary)
+                        Text(rawLabel, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Text(rawLabel, style = MaterialTheme.typography.bodyMedium)
+                    }
 
                     // Manufacturer name + company ID hex
                     if (device.companyNames.isNotEmpty()) {

@@ -32,6 +32,12 @@ fun ScanScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
+    // Reload learned signature each time ScanScreen becomes active — picks up signatures
+    // saved via CaptureScreen (which uses a different ViewModel instance).
+    LaunchedEffect(Unit) {
+        viewModel.reloadLearnedSignature()
+    }
+
     val permissionsState = rememberMultiplePermissionsState(
         permissions = PermissionUtils.BLE_PERMISSIONS.toList()
     ) { results ->
@@ -157,6 +163,20 @@ fun ScanScreen(
                 )
             }
 
+            // Learned device status chip
+            if (uiState.learnedSignature != null) {
+                SuggestionChip(
+                    onClick = {},
+                    label = {
+                        Text(
+                            "${uiState.learnedSignature!!.displayName} profile active",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+
             // Device list
             if (uiState.filteredDevices.isEmpty() && uiState.scanState == ScanState.SCANNING) {
                 Box(
@@ -185,7 +205,8 @@ fun ScanScreen(
                         DeviceCard(
                             device = device,
                             onClick = { onDeviceClick(device.id) },
-                            isTopCandidate = matchResult?.isTopCandidate == true
+                            isTopCandidate = matchResult?.isTopCandidate == true,
+                            learnedMatchResult = uiState.learnedMatchResults[device.id]
                         )
                     }
                 }
