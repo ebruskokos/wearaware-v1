@@ -2,12 +2,17 @@ package com.wearaware.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wearaware.app.domain.model.LearnedMatchInput
+import com.wearaware.app.domain.model.LearnedMatchResult
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.PersistenceAlert
 import com.wearaware.app.domain.model.ScanFilter
 import com.wearaware.app.domain.model.VisibilityState
 import com.wearaware.app.domain.repository.BleRepository
+import com.wearaware.app.domain.repository.LearnedSignatureRepository
 import com.wearaware.app.domain.usecase.*
+import com.wearaware.app.domain.usecase.MatchLearnedSignatureUseCase
+import com.wearaware.app.domain.usecase.extractPrefixesFromFingerprintMap
 import com.wearaware.app.util.AboutInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -21,7 +26,9 @@ class ScanViewModel @Inject constructor(
     private val logScanEvent: LogScanEventUseCase,
     private val matchTargetDevice: MatchTargetDeviceUseCase,
     private val bleRepository: BleRepository,
-    aboutInfo: AboutInfo
+    aboutInfo: AboutInfo,
+    private val matchLearnedSignature: MatchLearnedSignatureUseCase,
+    private val learnedSignatureRepository: LearnedSignatureRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -37,6 +44,10 @@ class ScanViewModel @Inject constructor(
                 ruleSetVersion = aboutInfo.ruleSetVersion,
                 ruleSetHash = aboutInfo.ruleSetHash
             )
+        }
+        val sig = learnedSignatureRepository.load()
+        if (sig != null) {
+            _uiState.update { it.copy(learnedSignature = sig) }
         }
     }
 
@@ -91,6 +102,12 @@ class ScanViewModel @Inject constructor(
     fun getDeviceById(deviceId: String): ObservedDevice? =
         _uiState.value.devices.find { it.id == deviceId }
 
+    /** Called from ScanScreen on composition to pick up signatures saved via CaptureScreen. */
+    fun reloadLearnedSignature() {
+        val sig = learnedSignatureRepository.load()
+        _uiState.update { it.copy(learnedSignature = sig) }
+    }
+
     private fun processDeviceUpdate(devices: List<ObservedDevice>) {
         // 1. Compute target match scores
         val matchScores = matchTargetDevice(devices, DefaultTargetProfile.WAYFARER_00ZS)
@@ -117,8 +134,33 @@ class ScanViewModel @Inject constructor(
             else -> currentAlert
         }
 
+        val learnedSig = _uiState.value.learnedSignature
+        val learnedMatches: Map<String, LearnedMatchResult> = if (learnedSig != null) {
+            devices.associate { device ->
+                val input = LearnedMatchInput(
+                    fingerprintId = device.id,
+                    manufacturerIds = device.fingerprint?.manufacturerIds ?: emptyList(),
+                    manufacturerDataPrefixes = extractPrefixesFromFingerprintMap(
+                        device.fingerprint?.manufacturerDataHex
+                    ),
+                    serviceUuids = device.fingerprint?.serviceUuids ?: emptyList(),
+                    averageRssi = device.averagedRssi,
+                    seenCount = device.seenCount,
+                    visibleAtStop = false  // live scan — visibleAtStop is a capture-only concept
+                )
+                device.id to matchLearnedSignature(input, learnedSig)
+            }
+        } else {
+            emptyMap()
+        }
+
         _uiState.update {
-            it.copy(devices = devices, activeAlert = updatedAlert, deviceMatchScores = matchScores)
+            it.copy(
+                devices = devices,
+                activeAlert = updatedAlert,
+                deviceMatchScores = matchScores,
+                learnedMatchResults = learnedMatches
+            )
         }
     }
 
