@@ -214,13 +214,13 @@ fun CapturedDeviceDetailScreen(
             val learnedSignatureDebug = uiState.learnedSignature
             if (learnedSignatureDebug == null) {
                 Text(
-                    "No learned signature saved",
+                    "Learned signature loaded: No",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
                 Text(
-                    "Learned signature: ${learnedSignatureDebug.displayName}",
+                    "Learned signature loaded: Yes — ${learnedSignatureDebug.displayName}",
                     style = MaterialTheme.typography.bodySmall
                 )
                 val learnedMatch = uiState.learnedMatchResults[fingerprintId]

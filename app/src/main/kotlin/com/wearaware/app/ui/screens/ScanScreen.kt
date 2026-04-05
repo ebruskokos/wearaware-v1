@@ -89,6 +89,20 @@ fun ScanScreen(
                 )
             }
 
+            // Learned device status chip
+            if (uiState.learnedSignature != null) {
+                SuggestionChip(
+                    onClick = {},
+                    label = {
+                        Text(
+                            "${uiState.learnedSignature!!.displayName} profile active",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+
             // Bluetooth off banner
             if (uiState.scanState == ScanState.BLUETOOTH_UNAVAILABLE) {
                 Card(
@@ -160,20 +174,6 @@ fun ScanScreen(
                     modifier = Modifier
                         .padding(horizontal = 16.dp)
                         .padding(bottom = 4.dp)
-                )
-            }
-
-            // Learned device status chip
-            if (uiState.learnedSignature != null) {
-                SuggestionChip(
-                    onClick = {},
-                    label = {
-                        Text(
-                            "${uiState.learnedSignature!!.displayName} profile active",
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    },
-                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
 

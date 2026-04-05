@@ -303,6 +303,7 @@ private fun CompareResultsSection(
                     CompareResultCard(
                         result = result,
                         isTopCandidate = isTopCandidate,
+                        isFirstResult = index == 0,
                         onViewDevice = onViewDevice,
                         learnedSignature = learnedSignature,
                         learnedMatchResult = learnedMatchResults[result.capturedDevice.fingerprintId],
@@ -364,6 +365,7 @@ private fun CompareSummaryRow(results: List<CompareMatchResult>) {
 private fun CompareResultCard(
     result: CompareMatchResult,
     isTopCandidate: Boolean,
+    isFirstResult: Boolean = false,
     onViewDevice: (String) -> Unit,
     learnedSignature: LearnedDeviceSignature?,
     learnedMatchResult: LearnedMatchResult?,
@@ -528,24 +530,15 @@ private fun CompareResultCard(
                 Text("View Device Details")
             }
 
-            // Learn button — shown on top candidate only, hidden if already saved
-            if (isTopCandidate) {
-                val alreadySaved = learnedSignature?.fingerprintId == device.fingerprintId
-                if (alreadySaved) {
-                    Text(
-                        "✓ Saved as learned device",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                } else {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedButton(
-                        onClick = { onLearnDevice(device.fingerprintId) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Learn this device — This is my glasses")
-                    }
+            // Learn button — shown on first result (index == 0), hidden if already saved
+            val alreadySaved = learnedSignature?.fingerprintId == device.fingerprintId
+            if (isFirstResult && !alreadySaved) {
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedButton(
+                    onClick = { onLearnDevice(device.fingerprintId) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Learn this device — This is my glasses")
                 }
             }
         }
