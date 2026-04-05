@@ -8,7 +8,8 @@ import javax.inject.Inject
  *
  * BONUSES:
  *   +6 any manufacturerId overlap (flat)
- *   +5 per manufacturer data prefix match
+ *   +5 per manufacturer data prefix match (first match)
+ *   +1 per additional prefix match beyond the first (consistency bonus, max +3)
  *   +4 per service UUID overlap
  *   +3 per GATT service UUID overlap
  *   +3 if fingerprintId exactly matches
@@ -42,11 +43,15 @@ class MatchKnownTargetSignatureUseCase @Inject constructor() {
             signals += "Manufacturer ID overlap: $hex (+6)"
         }
 
-        // +5 per manufacturer data prefix match
+        // +5 for first manufacturer data prefix match; +1 per additional (consistency, max +3)
         val matchedPrefixes = input.manufacturerDataPrefixes.intersect(signature.manufacturerDataPrefixes.toSet())
-        for (prefix in matchedPrefixes) {
-            score += 5
-            signals += "Manufacturer data prefix match: $prefix (+5)"
+        matchedPrefixes.forEachIndexed { index, prefix ->
+            val points = if (index == 0) 5 else minOf(1, 3 - index + 1).coerceAtLeast(0)
+            if (points > 0) {
+                score += points
+                val label = if (index == 0) "+5" else "+1 consistency"
+                signals += "Manufacturer data prefix match: $prefix ($label)"
+            }
         }
 
         // +4 per service UUID overlap

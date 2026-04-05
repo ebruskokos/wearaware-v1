@@ -3,6 +3,7 @@ package com.wearaware.app.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -28,6 +29,7 @@ import com.wearaware.app.util.formatFullTimestamp
 fun DeviceDetailScreen(
     deviceId: String,
     onBack: () -> Unit,
+    onPairAndLearnClick: () -> Unit = {},
     viewModel: ScanViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -244,6 +246,69 @@ fun DeviceDetailScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            }
+
+            // --- Training & Learned Profile ---
+            val sig = uiState.knownTargetSignature
+            if (sig != null && learnedMatchResult != null &&
+                (learnedMatchResult.confidence == KnownMatchConfidence.STRONG ||
+                    learnedMatchResult.confidence == KnownMatchConfidence.POSSIBLE)) {
+                HorizontalDivider()
+                Text("Training & Learned Profile", style = MaterialTheme.typography.titleSmall)
+
+                val profile = sig.behaviorProfile
+                val fmt = java.text.SimpleDateFormat("MMM d, yyyy HH:mm", java.util.Locale.getDefault())
+
+                Text(
+                    "Observations: ${sig.learnCount}  •  Last updated: ${fmt.format(sig.lastUpdatedAt)}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (profile != null) {
+                    Text(
+                        "Avg RSSI: ${profile.typicalRssiAtClose} dBm  " +
+                            "(${profile.rssiSampleCount.coerceAtLeast(1)} samples)",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (profile.maxSeenCount > 0) {
+                        Text(
+                            "Persistence range: ${profile.minSeenCount}–${profile.maxSeenCount} observations",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    if (profile.totalObservations > 0) {
+                        val visiblePct = if (profile.totalObservations > 0)
+                            (profile.visibleAtStopCount * 100) / profile.totalObservations else 0
+                        Text(
+                            "Visible at stop: ${profile.visibleAtStopCount}/${profile.totalObservations} sessions ($visiblePct%)",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+                if (sig.manufacturerDataPrefixes.isNotEmpty()) {
+                    Text("Learned prefixes (top ${sig.manufacturerDataPrefixes.size}):",
+                        style = MaterialTheme.typography.labelSmall)
+                    sig.manufacturerDataPrefixes.forEach { prefix ->
+                        val freq = sig.manufacturerDataPrefixFrequency[prefix]
+                        val freqLabel = if (freq != null) "  ×$freq" else ""
+                        Text(
+                            "  • $prefix$freqLabel",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { viewModel.refineFromObservation(deviceId) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Relearn", style = MaterialTheme.typography.labelSmall) }
+                    OutlinedButton(
+                        onClick = onPairAndLearnClick,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Training", style = MaterialTheme.typography.labelSmall) }
                 }
             }
 

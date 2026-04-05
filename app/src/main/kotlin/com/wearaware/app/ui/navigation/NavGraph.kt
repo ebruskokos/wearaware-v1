@@ -60,6 +60,7 @@ fun WearAwareNavGraph(navController: NavHostController) {
             DeviceDetailScreen(
                 deviceId = deviceId,
                 onBack = { navController.popBackStack() },
+                onPairAndLearnClick = { navController.navigate(Screen.PairAndLearn.route) },
                 viewModel = viewModel
             )
         }

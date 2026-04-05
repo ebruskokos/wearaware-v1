@@ -239,10 +239,29 @@ class PairAndLearnViewModel @Inject constructor(
 
                     if (matchResult != null) {
                         val (device, result) = matchResult
-                        val detail = "RSSI=${device.averagedRssi} seenCount=${device.seenCount} " +
-                            "confidence=${result.confidence.name} score=${result.score}"
+                        val mfIds = device.fingerprint?.manufacturerIds
+                            ?.joinToString(",") { "0x${it.toString(16).uppercase().padStart(4, '0')}" } ?: "none"
+                        val prefixes = extractPrefixesFromFingerprintMap(device.fingerprint?.manufacturerDataHex)
+                            .joinToString(",").ifEmpty { "none" }
+                        val svcUuids = device.fingerprint?.serviceUuids?.joinToString(",")?.ifEmpty { "none" } ?: "none"
+                        val detail = buildString {
+                            append("rssi=${device.averagedRssi}dBm ")
+                            append("rawRssi=${device.rawRssi}dBm ")
+                            append("seenCount=${device.seenCount} ")
+                            append("visibility=${device.visibilityState.name} ")
+                            append("connectable=${device.rawBleData?.isConnectable} ")
+                            append("manufacturers=[$mfIds] ")
+                            append("prefixes=[$prefixes] ")
+                            append("serviceUuids=[$svcUuids] ")
+                            append("confidence=${result.confidence.name} ")
+                            append("score=${result.score} ")
+                            append("signals=${result.matchedSignals.size}")
+                        }
                         logLearningEvent(sessionId, LearningEventType.BLE_SIGNAL_OBSERVED, detail)
-                        Log.d(TAG, "Training observation: $detail")
+                        Log.d("WearAware.Training", "Training observation: $detail")
+                        result.matchedSignals.forEach { signal ->
+                            Log.d("WearAware.Training", "  signal: $signal")
+                        }
                     }
                     delay(5_000)
                 }

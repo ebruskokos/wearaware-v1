@@ -14,6 +14,9 @@ import com.wearaware.app.domain.repository.BleRepository
 import com.wearaware.app.domain.repository.KnownTargetRepository
 import com.wearaware.app.domain.usecase.*
 import com.wearaware.app.domain.usecase.MatchKnownTargetSignatureUseCase
+import com.wearaware.app.domain.usecase.RefineKnownTargetFromObservationUseCase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.wearaware.app.util.AboutInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -30,6 +33,7 @@ class ScanViewModel @Inject constructor(
     aboutInfo: AboutInfo,
     private val matchKnownTarget: MatchKnownTargetSignatureUseCase,
     private val knownTargetRepository: KnownTargetRepository,
+    private val refineKnownTarget: RefineKnownTargetFromObservationUseCase,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -186,6 +190,22 @@ class ScanViewModel @Inject constructor(
                 deviceMatchScores = matchScores,
                 learnedMatchResults = learnedMatches
             )
+        }
+    }
+
+    /**
+     * Merges the live ObservedDevice matching [deviceId] into the existing learned signature.
+     * No-op if no signature exists or device is not in the current scan.
+     */
+    fun refineFromObservation(deviceId: String) {
+        val sig = _uiState.value.knownTargetSignature ?: return
+        val device = _uiState.value.devices.find { it.id == deviceId } ?: return
+        viewModelScope.launch {
+            val refined = withContext(Dispatchers.IO) {
+                refineKnownTarget(sig, device, visibleAtStop = device.visibilityState == VisibilityState.DETECTED_NOW)
+            }
+            Log.d(TAG, "Signature refined from live device: learnCount=${refined.learnCount}")
+            reloadLearnedSignature()
         }
     }
 
