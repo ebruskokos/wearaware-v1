@@ -64,22 +64,31 @@ class AdaptiveSignatureRefineUseCase @Inject constructor() {
     operator fun invoke(
         existing: KnownTargetSignature,
         device: ObservedDevice,
-        temporalState: DeviceTemporalState
+        temporalState: DeviceTemporalState,
+        /**
+         * When true (Relearn Mode), variance and drift guards are bypassed to allow faster
+         * signature updates. The structural anchor guard is always enforced.
+         */
+        relearnMode: Boolean = false
     ): AdaptiveRefineResult {
 
-        // Guard 1: RSSI variance check — reject noisy periods
-        val rssiHistory = temporalState.rssiHistory
-        val variance = if (rssiHistory.size >= 3) computeVariance(rssiHistory) else Double.MAX_VALUE
-        val stdDev = sqrt(variance)
-        if (stdDev >= VARIANCE_THRESHOLD) {
-            return skip("High RSSI variance σ=${stdDev.fmt()} dBm — waiting for stable signal")
+        // Guard 1: RSSI variance check — skip in relearn mode
+        if (!relearnMode) {
+            val rssiHistory = temporalState.rssiHistory
+            val variance = if (rssiHistory.size >= 3) computeVariance(rssiHistory) else Double.MAX_VALUE
+            val stdDev = sqrt(variance)
+            if (stdDev >= VARIANCE_THRESHOLD) {
+                return skip("High RSSI variance σ=${stdDev.fmt()} dBm — waiting for stable signal")
+            }
         }
 
-        // Guard 2: RSSI drift check — reject if too far from learned average
+        // Guard 2: RSSI drift check — skip in relearn mode
         val learnedAvg = existing.behaviorProfile?.typicalRssiAtClose ?: device.averagedRssi
-        val rssiDrift = abs(device.averagedRssi - learnedAvg)
-        if (rssiDrift > MAX_RSSI_DRIFT) {
-            return skip("RSSI drift ${rssiDrift} dBm exceeds limit ${MAX_RSSI_DRIFT} dBm")
+        if (!relearnMode) {
+            val rssiDrift = abs(device.averagedRssi - learnedAvg)
+            if (rssiDrift > MAX_RSSI_DRIFT) {
+                return skip("RSSI drift ${rssiDrift} dBm exceeds limit ${MAX_RSSI_DRIFT} dBm")
+            }
         }
 
         // Guard 3: structural anchor — device must share at least one manufacturer ID

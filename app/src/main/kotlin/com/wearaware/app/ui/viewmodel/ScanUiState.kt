@@ -6,7 +6,9 @@ import com.wearaware.app.domain.model.MatchConfidence
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.PersistenceAlert
 import com.wearaware.app.domain.model.RankedCandidate
+import com.wearaware.app.domain.model.ScanAnomalyEvent
 import com.wearaware.app.domain.model.ScanFilter
+import com.wearaware.app.domain.model.SessionReport
 import com.wearaware.app.domain.model.TargetMatchResult
 
 data class ScanUiState(
@@ -39,6 +41,17 @@ data class ScanUiState(
      * In-memory only — cleared on scan stop.
      */
     val persistentNonTargetIds: Set<String> = emptySet(),
+    /** True when debug overlay (lock/score/RSSI strip) is visible. Toggled via toolbar. */
+    val debugOverlayVisible: Boolean = false,
+    /**
+     * Relearn mode temporarily disables variance and drift guards in adaptive refinement,
+     * allowing faster signature updates when the user explicitly requests it.
+     */
+    val relearnModeActive: Boolean = false,
+    /** Anomaly events logged during the current scan session. In-memory only. */
+    val anomalyLog: List<ScanAnomalyEvent> = emptyList(),
+    /** Session report produced when the last scan session ended. Null before first session. */
+    val lastSessionReport: SessionReport? = null,
 ) {
     val bestMatch: Pair<ObservedDevice, TargetMatchResult>?
         get() {

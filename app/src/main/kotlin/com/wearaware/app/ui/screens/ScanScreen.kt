@@ -104,6 +104,24 @@ fun ScanScreen(
                                 style = MaterialTheme.typography.labelSmall
                             )
                         }
+                        TextButton(onClick = { viewModel.toggleDebugOverlay() }) {
+                            Text(
+                                text = if (uiState.debugOverlayVisible) "Overlay Off" else "Overlay",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    if (uiState.knownTargetSignature != null) {
+                        TextButton(onClick = { viewModel.toggleRelearnMode() }) {
+                            Text(
+                                text = if (uiState.relearnModeActive) "Relearn: ON" else "Relearn",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (uiState.relearnModeActive)
+                                    MaterialTheme.colorScheme.error
+                                else
+                                    MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             )
@@ -180,6 +198,51 @@ fun ScanScreen(
                     onDeviceClick = onDeviceClick,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
+            }
+
+            // Debug overlay strip — lock status / top candidate score / RSSI
+            if (uiState.debugOverlayVisible && uiState.scanState == ScanState.SCANNING) {
+                DebugOverlayStrip(uiState = uiState)
+            }
+
+            // Session report (shown after scan stops)
+            val report = uiState.lastSessionReport
+            if (uiState.scanState == ScanState.STOPPED && report != null) {
+                SessionReportCard(
+                    report = report,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+
+            // Reset Learning button (shown when stopped and signature exists)
+            if (uiState.scanState == ScanState.STOPPED && uiState.knownTargetSignature != null) {
+                var showConfirm by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick = { showConfirm = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Reset Learning", style = MaterialTheme.typography.labelSmall)
+                }
+                if (showConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showConfirm = false },
+                        title = { Text("Reset Learning?") },
+                        text = { Text("This will permanently delete the learned signature and all history.") },
+                        confirmButton = {
+                            TextButton(onClick = { viewModel.resetLearning(); showConfirm = false }) {
+                                Text("Reset", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showConfirm = false }) { Text("Cancel") }
+                        }
+                    )
+                }
             }
 
             // Adaptive refinement indicator
@@ -444,6 +507,115 @@ private fun RankedCandidateRow(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DebugOverlayStrip(
+    uiState: com.wearaware.app.ui.viewmodel.ScanUiState
+) {
+    val lockedId = uiState.primaryLockDeviceId
+    val topResult = if (lockedId != null) uiState.learnedMatchResults[lockedId]
+                    else uiState.rankedCandidates.firstOrNull()?.matchResult
+    val topDevice = if (lockedId != null) uiState.devices.find { it.id == lockedId }
+                    else uiState.rankedCandidates.firstOrNull()?.device
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.92f),
+        tonalElevation = 4.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (lockedId != null) {
+                Text(
+                    "LOCKED",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.inversePrimary
+                )
+            } else {
+                Text(
+                    "NO LOCK",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.6f)
+                )
+            }
+            if (topResult != null) {
+                Text(
+                    "Score: ${topResult.score}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.inverseOnSurface
+                )
+                Text(
+                    topResult.confidence.name,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = when (topResult.confidence) {
+                        KnownMatchConfidence.STRONG -> MaterialTheme.colorScheme.inversePrimary
+                        KnownMatchConfidence.POSSIBLE -> MaterialTheme.colorScheme.inverseOnSurface
+                        else -> MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.6f)
+                    }
+                )
+            }
+            if (topDevice != null) {
+                Text(
+                    "${topDevice.averagedRssi} dBm",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.inverseOnSurface
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionReportCard(
+    report: com.wearaware.app.domain.model.SessionReport,
+    modifier: Modifier = Modifier
+) {
+    val fmt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+    val durationSec = report.sessionDurationMs / 1000
+    val lockedSec = report.totalLockedMs / 1000
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Last Session Report", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Duration: ${durationSec}s  •  Locked: ${lockedSec}s",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                "Candidates seen: ${report.totalCandidatesSeen}  •  Lock switches: ${report.lockSwitchCount}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (report.maxCompetingScore > 0) {
+                Text(
+                    "Max competing score: ${report.maxCompetingScore}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (report.maxCompetingScore >= 8) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            report.lockedDeviceId?.let {
+                Text(
+                    "Locked device: ${it.take(20)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                "Ended: ${fmt.format(report.endedAt)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

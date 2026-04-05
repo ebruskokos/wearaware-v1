@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.GsonBuilder
+import com.wearaware.app.domain.model.AnomalyType
 import com.wearaware.app.domain.model.CandidateLifecycle
 import com.wearaware.app.domain.model.DeviceTemporalState
 import com.wearaware.app.domain.model.KnownMatchConfidence
@@ -11,7 +12,9 @@ import com.wearaware.app.domain.model.KnownTargetMatchInput
 import com.wearaware.app.domain.model.KnownTargetMatchResult
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.PersistenceAlert
+import com.wearaware.app.domain.model.ScanAnomalyEvent
 import com.wearaware.app.domain.model.ScanFilter
+import com.wearaware.app.domain.model.SessionReport
 import com.wearaware.app.domain.model.VisibilityState
 import com.wearaware.app.domain.repository.BleRepository
 import com.wearaware.app.domain.repository.KnownTargetRepository
@@ -74,6 +77,15 @@ class ScanViewModel @Inject constructor(
     /** Tracks whether the adaptive scan mode is currently set to balanced (locked state). */
     private var scanModeBalanced: Boolean = false
 
+    // --- Session tracking (for SessionReport) ---
+    private var sessionStartMs: Long = 0L
+    private var lockStartMs: Long = 0L
+    private var totalLockedMs: Long = 0L
+    private var lockSwitchCount: Int = 0
+    private var maxCompetingScore: Int = 0
+    private val candidatesSeen = mutableSetOf<String>()
+    private var prevLockId: String? = null
+
     companion object {
         private const val TAG = "WearAware.ScanVM"
         /** Minimum interval between adaptive signature refinements. */
@@ -110,7 +122,14 @@ class ScanViewModel @Inject constructor(
             return
         }
         bleRepository.startScanning()
-        _uiState.update { it.copy(scanState = ScanState.SCANNING) }
+        sessionStartMs = System.currentTimeMillis()
+        totalLockedMs = 0L
+        lockStartMs = 0L
+        lockSwitchCount = 0
+        maxCompetingScore = 0
+        candidatesSeen.clear()
+        prevLockId = null
+        _uiState.update { it.copy(scanState = ScanState.SCANNING, anomalyLog = emptyList()) }
         scanCollectJob?.cancel()
         // Run processing on Default to keep scoring/matching off the main thread
         scanCollectJob = viewModelScope.launch(Dispatchers.Default) {
@@ -122,6 +141,20 @@ class ScanViewModel @Inject constructor(
         scanCollectJob?.cancel()
         scanCollectJob = null
         bleRepository.stopScanning()
+
+        // Finalise session report before clearing state
+        val now = System.currentTimeMillis()
+        if (lockStartMs > 0L) totalLockedMs += (now - lockStartMs)
+        val report = if (sessionStartMs > 0L) SessionReport(
+            sessionDurationMs = now - sessionStartMs,
+            totalLockedMs = totalLockedMs,
+            totalCandidatesSeen = candidatesSeen.size,
+            maxCompetingScore = maxCompetingScore,
+            lockedDeviceId = primaryLockId,
+            lockSwitchCount = lockSwitchCount,
+            endedAt = now
+        ) else null
+
         lastAlertedAt.clear()
         loggedDeviceIds.clear()
         deviceTemporalStates.clear()
@@ -131,6 +164,14 @@ class ScanViewModel @Inject constructor(
         lastAdaptiveRefineAt = 0L
         nonTargetTickCounts.clear()
         scanModeBalanced = false
+        sessionStartMs = 0L
+        lockStartMs = 0L
+        totalLockedMs = 0L
+        lockSwitchCount = 0
+        maxCompetingScore = 0
+        candidatesSeen.clear()
+        prevLockId = null
+
         _uiState.update {
             it.copy(
                 scanState = ScanState.STOPPED,
@@ -142,7 +183,10 @@ class ScanViewModel @Inject constructor(
                 primaryLockDeviceId = null,
                 isRefiningSignature = false,
                 lastRefinementDelta = null,
-                persistentNonTargetIds = emptySet()
+                persistentNonTargetIds = emptySet(),
+                anomalyLog = emptyList(),
+                relearnModeActive = false,
+                lastSessionReport = report ?: it.lastSessionReport
             )
         }
     }
@@ -167,6 +211,30 @@ class ScanViewModel @Inject constructor(
 
     fun setFilter(filter: ScanFilter) {
         _uiState.update { it.copy(activeFilter = filter) }
+    }
+
+    fun toggleDebugOverlay() {
+        _uiState.update { it.copy(debugOverlayVisible = !it.debugOverlayVisible) }
+    }
+
+    fun toggleRelearnMode() {
+        _uiState.update { it.copy(relearnModeActive = !it.relearnModeActive) }
+    }
+
+    /** Wipes the learned signature and full history. Cannot be undone. */
+    fun resetLearning() {
+        runCatching { knownTargetRepository.clear() }
+        _uiState.update {
+            it.copy(
+                knownTargetSignature = null,
+                learnedMatchResults = emptyMap(),
+                rankedCandidates = emptyList(),
+                primaryLockDeviceId = null,
+                lastRefinementDelta = null,
+                relearnModeActive = false
+            )
+        }
+        Log.d(TAG, "Learning reset — signature and history cleared")
     }
 
     fun getDeviceById(deviceId: String): ObservedDevice? =
@@ -284,14 +352,58 @@ class ScanViewModel @Inject constructor(
         prevRankOrder = ranked.map { it.device.id }
         primaryLockId = newLockId
 
-        // 6. Battery: switch scan mode based on lock stability (only when mode needs to change)
+        // 6. Session tracking + anomaly logging
+        val tickNow = System.currentTimeMillis()
+        val newAnomalies = mutableListOf<ScanAnomalyEvent>()
+
+        // Track all candidates seen this session
+        learnedMatches.forEach { (id, result) -> if (result.score > 0) candidatesSeen.add(id) }
+
+        // Track max competing score (non-lock candidates)
+        learnedMatches.forEach { (id, result) ->
+            if (id != newLockId && result.score > maxCompetingScore) maxCompetingScore = result.score
+        }
+
+        // Lock switch detection
+        if (newLockId != prevLockId) {
+            if (prevLockId != null && lockStartMs > 0L) {
+                totalLockedMs += (tickNow - lockStartMs)
+            }
+            if (newLockId != null) {
+                lockStartMs = tickNow
+                if (prevLockId != null) {
+                    // Actual switch — lock moved from one device to another
+                    lockSwitchCount++
+                    val fromResult = learnedMatches[prevLockId]
+                    val toResult = learnedMatches[newLockId]
+                    val detail = "Lock switched: $prevLockId (score=${fromResult?.score}) → $newLockId (score=${toResult?.score})"
+                    Log.w(TAG, "ANOMALY lock-switch: $detail")
+                    newAnomalies += ScanAnomalyEvent(tickNow, AnomalyType.LOCK_SWITCH, detail)
+                }
+            } else {
+                lockStartMs = 0L
+            }
+            prevLockId = newLockId
+        }
+
+        // Strong false positive: non-lock device reached STRONG confidence
+        learnedMatches.forEach { (id, result) ->
+            if (id != newLockId && result.confidence == KnownMatchConfidence.STRONG) {
+                val breakdown = result.scoreBreakdown.joinToString { "${it.category.name}:${it.points}" }
+                val detail = "STRONG non-lock: device=$id score=${result.score} breakdown=[$breakdown]"
+                Log.w(TAG, "ANOMALY false-positive: $detail")
+                newAnomalies += ScanAnomalyEvent(tickNow, AnomalyType.STRONG_FALSE_POSITIVE, detail)
+            }
+        }
+
+        // 7. Battery: switch scan mode based on lock stability (only when mode needs to change)
         val wantBalanced = newLockId != null
         if (wantBalanced != scanModeBalanced) {
             scanModeBalanced = wantBalanced
             bleRepository.setAdaptiveScanMode(wantBalanced)
         }
 
-        // 7. Prune orphaned per-device state for devices no longer in the scan list
+        // 8. Prune orphaned per-device state for devices no longer in the scan list
         val activeIds = devices.map { it.id }.toSet()
         deviceTemporalStates.keys.retainAll(activeIds)
         deviceLifecycles.keys.retainAll(activeIds)
@@ -305,12 +417,14 @@ class ScanViewModel @Inject constructor(
                 learnedMatchResults = learnedMatches,
                 rankedCandidates = ranked,
                 primaryLockDeviceId = newLockId,
-                persistentNonTargetIds = persistentNonTargetIds
+                persistentNonTargetIds = persistentNonTargetIds,
+                anomalyLog = if (newAnomalies.isEmpty()) it.anomalyLog
+                             else (it.anomalyLog + newAnomalies).takeLast(50)
             )
         }
 
         // 8. Adaptive refinement — only when a primary lock is established
-        newLockId?.let { lockedId -> maybeAdaptiveRefine(lockedId, devices) }
+        newLockId?.let { lockedId -> maybeAdaptiveRefine(lockedId, devices, _uiState.value.relearnModeActive) }
     }
 
     /**
@@ -349,18 +463,20 @@ class ScanViewModel @Inject constructor(
         }
     }
 
-    private fun maybeAdaptiveRefine(lockedId: String, devices: List<ObservedDevice>) {
+    private fun maybeAdaptiveRefine(lockedId: String, devices: List<ObservedDevice>, relearnMode: Boolean = false) {
         val sig = _uiState.value.knownTargetSignature ?: return
         val device = devices.find { it.id == lockedId } ?: return
         val temporalState = deviceTemporalStates[lockedId] ?: return
 
         val now = System.currentTimeMillis()
-        if (now - lastAdaptiveRefineAt < ADAPTIVE_INTERVAL_MS) return
+        // Relearn mode uses a tighter interval (5s instead of 30s)
+        val interval = if (relearnMode) 5_000L else ADAPTIVE_INTERVAL_MS
+        if (now - lastAdaptiveRefineAt < interval) return
 
         viewModelScope.launch {
             _uiState.update { it.copy(isRefiningSignature = true) }
             val result = withContext(Dispatchers.IO) {
-                adaptiveRefine(sig, device, temporalState)
+                adaptiveRefine(sig, device, temporalState, relearnMode)
             }
             if (result.wasRefined && result.signature != null) {
                 val delta = result.deltaDescription ?: ""
