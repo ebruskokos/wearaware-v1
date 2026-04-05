@@ -103,10 +103,10 @@ data class KnownTargetSignature(
     val manufacturerDataPrefixes: List<String>,
     val serviceUuids: List<String>,
     val gattServiceUuids: List<String>,
-    val behaviorProfile: LearnedBehaviorProfile?
+    val behaviorProfile: KnownBehaviorProfile?
 )
 
-data class LearnedBehaviorProfile(
+data class KnownBehaviorProfile(
     val typicalRssiAtClose: Int,
     val minSeenCount: Int
 )
@@ -407,7 +407,7 @@ class KnownTargetRepositoryImplTest {
         manufacturerDataPrefixes = listOf("0075:deadbeef"),
         serviceUuids = listOf("0000fe2c-0000-1000-8000-00805f9b34fb"),
         gattServiceUuids = listOf("0000180a-0000-1000-8000-00805f9b34fb"),
-        behaviorProfile = LearnedBehaviorProfile(typicalRssiAtClose = -55, minSeenCount = 80)
+        behaviorProfile = KnownBehaviorProfile(typicalRssiAtClose = -55, minSeenCount = 80)
     )
 
     @Before
@@ -1392,7 +1392,7 @@ class BuildKnownTargetSignatureUseCase @Inject constructor() {
             serviceUuids = observedDevice?.fingerprint?.serviceUuids ?: emptyList(),
             gattServiceUuids = gattResult.serviceUuids,
             behaviorProfile = observedDevice?.let {
-                LearnedBehaviorProfile(
+                KnownBehaviorProfile(
                     typicalRssiAtClose = it.averagedRssi,
                     minSeenCount = it.seenCount
                 )
@@ -1452,7 +1452,7 @@ class SaveKnownTargetFromCaptureUseCase @Inject constructor(
             manufacturerDataPrefixes = prefixes,
             serviceUuids = device.serviceUuids,
             gattServiceUuids = emptyList(),
-            behaviorProfile = LearnedBehaviorProfile(
+            behaviorProfile = KnownBehaviorProfile(
                 typicalRssiAtClose = device.averageRssi,
                 minSeenCount = device.seenCount
             )

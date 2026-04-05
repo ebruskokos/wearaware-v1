@@ -21,6 +21,7 @@ class KnownTargetRepositoryImpl @Inject constructor(
     }
 
     override fun save(signature: KnownTargetSignature) {
+        // commit() instead of apply() — user-initiated save must survive an immediate process kill
         prefs.edit().putString(KEY_KNOWN_TARGET_SIGNATURE, gson.toJson(signature)).commit()
     }
 
