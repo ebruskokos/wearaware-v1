@@ -3,13 +3,11 @@ package com.wearaware.app.di
 import com.wearaware.app.data.repository.BleRepositoryImpl
 import com.wearaware.app.data.repository.CaptureRepositoryImpl
 import com.wearaware.app.data.repository.KnownTargetRepositoryImpl
-import com.wearaware.app.data.repository.LearnedSignatureRepositoryImpl
 import com.wearaware.app.data.repository.LearningSessionRepositoryImpl
 import com.wearaware.app.data.repository.ScanLogRepositoryImpl
 import com.wearaware.app.domain.repository.BleRepository
 import com.wearaware.app.domain.repository.CaptureRepository
 import com.wearaware.app.domain.repository.KnownTargetRepository
-import com.wearaware.app.domain.repository.LearnedSignatureRepository
 import com.wearaware.app.domain.repository.LearningSessionRepository
 import com.wearaware.app.domain.repository.ScanLogRepository
 import dagger.Binds
@@ -47,9 +45,4 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindLearningSessionRepository(impl: LearningSessionRepositoryImpl): LearningSessionRepository
-
-    // TODO(Task 17): remove — kept temporarily while CaptureViewModel migration is pending
-    @Binds
-    @Singleton
-    abstract fun bindLearnedSignatureRepository(impl: LearnedSignatureRepositoryImpl): LearnedSignatureRepository
 }
