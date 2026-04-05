@@ -146,7 +146,8 @@ class CaptureViewModel @Inject constructor(
                     seenCount = acc.seenCount,
                     visibleAtStop = acc.fingerprintId in visibleIds,
                     targetMatchScore = acc.targetMatchScore,
-                    targetMatchSignals = acc.targetMatchSignals
+                    targetMatchSignals = acc.targetMatchSignals,
+                    observationLog = acc.buildObservationLog()
                 )
             }
 

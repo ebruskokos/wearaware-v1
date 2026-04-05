@@ -1,5 +1,6 @@
 package com.wearaware.app.ui.viewmodel
 
+import com.wearaware.app.domain.model.CaptureObservationLog
 import com.wearaware.app.domain.model.DeviceCategory
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.TargetMatchResult
@@ -8,8 +9,9 @@ import com.wearaware.app.domain.model.TargetMatchResult
  * Mutable accumulator for a single device observed during a capture window.
  * Identity fields are seeded from the first observation and enriched by later observations
  * when richer data becomes available (e.g. manufacturerIds appearing in a later scan tick).
+ * Observation tracking fields record the full history for debug visibility.
  */
-internal data class DeviceAccumulator(
+internal class DeviceAccumulator(
     val fingerprintId: String,
     var advertisedName: String?,
     val macAddress: String?,
@@ -29,6 +31,21 @@ internal data class DeviceAccumulator(
 ) {
     val averageRssi: Int get() = if (readingCount > 0) (runningRssiSum / readingCount).toInt() else peakRssi
 
+    // --- Observation tracking (debug/validation) ---
+
+    /** All distinct advertised names seen, in insertion order. */
+    val observedNames: LinkedHashSet<String> = LinkedHashSet<String>().also {
+        advertisedName?.let { n -> it.add(n) }
+    }
+
+    /** All distinct DeviceCategory values seen, in insertion order. */
+    val classificationHistory: LinkedHashSet<DeviceCategory> = linkedSetOf(category)
+
+    /** Target match scores recorded when the score strictly increased. */
+    val targetMatchScoreHistory: MutableList<Int> = mutableListOf<Int>().also {
+        targetMatchScore?.let { s -> it.add(s) }
+    }
+
     /**
      * Updates this accumulator with a new observation of the same device.
      *
@@ -37,6 +54,7 @@ internal data class DeviceAccumulator(
      * this ensures a device first observed with incomplete advertising data eventually
      * retains its richest available identity before being saved as a CapturedDevice.
      * targetMatchScore/Signals are updated only when the new score is strictly higher.
+     * Observation tracking fields accumulate the full history for debug visibility.
      */
     fun updateFrom(device: ObservedDevice, matchResult: TargetMatchResult?, now: Long) {
         lastSeenInCapture = now
@@ -44,6 +62,9 @@ internal data class DeviceAccumulator(
         if (device.rawRssi > peakRssi) peakRssi = device.rawRssi
         runningRssiSum += device.rawRssi
         readingCount++
+
+        // Track all distinct names
+        device.advertisedName?.let { observedNames.add(it) }
 
         // Replace null name with first observed non-null name
         if (advertisedName == null && device.advertisedName != null) {
@@ -63,11 +84,10 @@ internal data class DeviceAccumulator(
         }
 
         // Upgrade category from UNKNOWN_BLE_DEVICE to any more specific classification
-        if (category == DeviceCategory.UNKNOWN_BLE_DEVICE) {
-            val newCategory = device.classification.category
-            if (newCategory != DeviceCategory.UNKNOWN_BLE_DEVICE) {
-                category = newCategory
-            }
+        val newCategory = device.classification.category
+        classificationHistory.add(newCategory)
+        if (category == DeviceCategory.UNKNOWN_BLE_DEVICE && newCategory != DeviceCategory.UNKNOWN_BLE_DEVICE) {
+            category = newCategory
         }
 
         // Replace empty companyNames with first observed non-empty set
@@ -87,6 +107,16 @@ internal data class DeviceAccumulator(
         if (matchResult != null && matchResult.score > (targetMatchScore ?: 0)) {
             targetMatchScore = matchResult.score
             targetMatchSignals = matchResult.matchedSignals
+            targetMatchScoreHistory.add(matchResult.score)
         }
     }
+
+    /** Builds the observation log from accumulated tracking data. */
+    fun buildObservationLog(): CaptureObservationLog = CaptureObservationLog(
+        observedNames = observedNames.toList(),
+        bestManufacturerIds = manufacturerIds,
+        bestManufacturerDataSummary = manufacturerDataSummary,
+        classificationHistory = classificationHistory.toList(),
+        targetMatchScoreHistory = targetMatchScoreHistory.toList()
+    )
 }

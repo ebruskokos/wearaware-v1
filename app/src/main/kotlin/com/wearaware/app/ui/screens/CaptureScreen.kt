@@ -197,6 +197,11 @@ private fun CompareResultsSection(
         }
         Text(headerText, style = MaterialTheme.typography.titleSmall)
 
+        // Compare summary — quick stats for validation
+        if (safeResults.isNotEmpty()) {
+            CompareSummaryRow(results = safeResults)
+        }
+
         if (safeResults.isNotEmpty() && safeResults.all { it.confidence == CompareConfidence.LOW }) {
             Text(
                 "All results are LOW confidence — only weak differential evidence found. " +
@@ -246,6 +251,52 @@ private fun CompareResultsSection(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CompareSummaryRow(results: List<CompareMatchResult>) {
+    val targetOnlyCount = results.count { !it.seenInBaseline }
+    val metaCount = results.count { it.capturedDevice.manufacturerIds.contains(0x0075) }
+    val topScore = results.maxOfOrNull { it.score } ?: 0
+    val topConfidence = results.firstOrNull()?.confidence ?: CompareConfidence.NONE
+    val hasStrongMatch = results.any {
+        it.confidence == CompareConfidence.HIGH || it.confidence == CompareConfidence.MEDIUM
+    }
+
+    val summaryColor = when {
+        hasStrongMatch && metaCount > 0 -> MaterialTheme.colorScheme.primary
+        hasStrongMatch -> MaterialTheme.colorScheme.secondary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                "Target-only: $targetOnlyCount  |  Meta ID: $metaCount  |  Top score: $topScore  |  Top: ${topConfidence.name}",
+                style = MaterialTheme.typography.labelSmall,
+                color = summaryColor
+            )
+            Text(
+                if (hasStrongMatch && metaCount > 0)
+                    "✓ Strong match with Meta manufacturer evidence"
+                else if (hasStrongMatch)
+                    "✓ Strong match found — no Meta manufacturer ID yet"
+                else if (metaCount > 0)
+                    "Meta manufacturer ID present — score below MEDIUM threshold"
+                else
+                    "No strong differential match — all results LOW or below",
+                style = MaterialTheme.typography.labelSmall,
+                color = summaryColor
+            )
         }
     }
 }

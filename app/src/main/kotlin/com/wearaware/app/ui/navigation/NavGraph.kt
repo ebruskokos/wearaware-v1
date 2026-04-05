@@ -7,9 +7,11 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.wearaware.app.ui.screens.CaptureScreen
+import com.wearaware.app.ui.screens.CapturedDeviceDetailScreen
 import com.wearaware.app.ui.screens.DeviceDetailScreen
 import com.wearaware.app.ui.screens.ScanScreen
 import com.wearaware.app.ui.screens.SessionLogScreen
+import com.wearaware.app.ui.viewmodel.CaptureViewModel
 import com.wearaware.app.ui.viewmodel.ScanViewModel
 
 sealed class Screen(val route: String) {
@@ -19,6 +21,9 @@ sealed class Screen(val route: String) {
     }
     object SessionLog : Screen("session_log")
     object Capture : Screen("capture")
+    object CaptureDeviceDetail : Screen("capture_device/{fingerprintId}") {
+        fun routeFor(fingerprintId: String) = "capture_device/$fingerprintId"
+    }
 }
 
 @Composable
@@ -53,9 +58,22 @@ fun WearAwareNavGraph(navController: NavHostController) {
         composable(Screen.Capture.route) {
             CaptureScreen(
                 onBack = { navController.popBackStack() },
-                onViewDeviceDetail = { deviceId ->
-                    navController.navigate(Screen.DeviceDetail.routeFor(deviceId))
+                onViewDeviceDetail = { fingerprintId ->
+                    navController.navigate(Screen.CaptureDeviceDetail.routeFor(fingerprintId))
                 }
+            )
+        }
+        composable(Screen.CaptureDeviceDetail.route) { backStackEntry ->
+            val fingerprintId = backStackEntry.arguments?.getString("fingerprintId") ?: return@composable
+            // Share CaptureViewModel with CaptureScreen so session data is still available
+            val captureEntry = remember(backStackEntry) {
+                navController.getBackStackEntry(Screen.Capture.route)
+            }
+            val viewModel: CaptureViewModel = hiltViewModel(captureEntry)
+            CapturedDeviceDetailScreen(
+                fingerprintId = fingerprintId,
+                onBack = { navController.popBackStack() },
+                viewModel = viewModel
             )
         }
     }

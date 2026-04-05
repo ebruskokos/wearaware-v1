@@ -25,5 +25,10 @@ data class CapturedDevice(
     val seenCount: Int,
     val visibleAtStop: Boolean,
     val targetMatchScore: Int?,
-    val targetMatchSignals: List<String>
+    val targetMatchSignals: List<String>,
+    /**
+     * Richest-observation debug log for this device. Only populated for captures
+     * performed in the current app session — null when loaded from Room.
+     */
+    val observationLog: CaptureObservationLog? = null
 )
