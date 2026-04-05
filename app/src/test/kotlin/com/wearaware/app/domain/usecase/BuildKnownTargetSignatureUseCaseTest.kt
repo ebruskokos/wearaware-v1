@@ -114,4 +114,44 @@ class BuildKnownTargetSignatureUseCaseTest {
         val sig = useCase(makeObservedDevice(), makeGattResult())
         assertEquals("My Meta Glasses", sig.displayName)
     }
+
+    @Test
+    fun `short hex shorter than 4 chars is excluded from prefixes`() {
+        // extractPrefixesFromFingerprintMap calls hex.take(8), then filters prefix.length >= 4
+        // hex of length 2 → take(8) → "ab" → "0075:ab" — but filtered because "ab".length < 4
+        val device = makeObservedDevice(
+            fingerprint = makeFingerprint(
+                manufacturerDataHex = mapOf(0x0075 to "ab") // only 2 chars, too short
+            )
+        )
+        val sig = useCase(device, makeGattResult())
+        assertTrue("Short hex should be filtered out", sig.manufacturerDataPrefixes.isEmpty())
+    }
+
+    @Test
+    fun `non-null device with empty manufacturerDataHex map produces empty prefixes`() {
+        val device = makeObservedDevice(
+            fingerprint = makeFingerprint(
+                manufacturerDataHex = emptyMap()
+            )
+        )
+        val sig = useCase(device, makeGattResult())
+        assertTrue(sig.manufacturerDataPrefixes.isEmpty())
+    }
+
+    @Test
+    fun `single-byte company ID is padded to 4 hex digits in prefix`() {
+        // Company ID 0x004C (Apple) should appear as "004c" in the prefix
+        val device = makeObservedDevice(
+            fingerprint = makeFingerprint(
+                manufacturerIds = listOf(0x004C),
+                manufacturerDataHex = mapOf(0x004C to "deadbeef01234567")
+            )
+        )
+        val sig = useCase(device, makeGattResult())
+        assertTrue(
+            "Prefix should use 4-char padded company ID",
+            sig.manufacturerDataPrefixes.any { it.startsWith("004c:") }
+        )
+    }
 }
