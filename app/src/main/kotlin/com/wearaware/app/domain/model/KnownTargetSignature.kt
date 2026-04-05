@@ -15,10 +15,10 @@ data class KnownTargetSignature(
     val manufacturerDataPrefixes: List<String>,
     val serviceUuids: List<String>,
     val gattServiceUuids: List<String>,
-    val behaviorProfile: LearnedBehaviorProfile?
+    val behaviorProfile: KnownBehaviorProfile?
 )
 
-data class LearnedBehaviorProfile(
+data class KnownBehaviorProfile(
     val typicalRssiAtClose: Int,
     val minSeenCount: Int
 )
