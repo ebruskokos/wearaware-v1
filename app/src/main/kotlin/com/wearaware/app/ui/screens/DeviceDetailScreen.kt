@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.wearaware.app.domain.model.BleDebugData
 import com.wearaware.app.domain.model.DeviceCategory
+import com.wearaware.app.domain.model.KnownMatchConfidence
 import com.wearaware.app.domain.model.MatchConfidence
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.ui.components.SafeWording
@@ -32,6 +33,7 @@ fun DeviceDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     val device: ObservedDevice? = uiState.devices.firstOrNull { it.id == deviceId }
     val matchResult = uiState.deviceMatchScores[deviceId]
+    val learnedMatchResult = uiState.learnedMatchResults[deviceId]
 
     Scaffold(
         topBar = {
@@ -188,6 +190,57 @@ fun DeviceDetailScreen(
                         Text(
                             text = "  • $signal",
                             style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // --- Known Device Match ---
+            HorizontalDivider()
+            Text("Known Device Match", style = MaterialTheme.typography.titleSmall)
+            if (uiState.knownTargetSignature == null) {
+                Text(
+                    "No learned profile — use \"Pair & Learn\" to train WearAware on your glasses.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else if (learnedMatchResult == null) {
+                Text(
+                    "Profile loaded but no match data yet — start a scan to compute.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                val confidenceColor = when (learnedMatchResult.confidence) {
+                    KnownMatchConfidence.STRONG -> MaterialTheme.colorScheme.primary
+                    KnownMatchConfidence.POSSIBLE -> MaterialTheme.colorScheme.secondary
+                    KnownMatchConfidence.WEAK -> MaterialTheme.colorScheme.tertiary
+                    KnownMatchConfidence.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                val confidenceLabel = when (learnedMatchResult.confidence) {
+                    KnownMatchConfidence.STRONG -> "Strong match — \"${learnedMatchResult.signature.displayName}\""
+                    KnownMatchConfidence.POSSIBLE -> "Possible match to your glasses"
+                    KnownMatchConfidence.WEAK -> "Weak match (limited signals)"
+                    KnownMatchConfidence.NONE -> "No match to learned profile"
+                }
+                Text(
+                    text = confidenceLabel,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = confidenceColor
+                )
+                Text(
+                    text = "Score: ${learnedMatchResult.score}  •  Label override: ${if (learnedMatchResult.labelOverrideActive) "active" else "off"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (learnedMatchResult.matchedSignals.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Why it matched:", style = MaterialTheme.typography.labelSmall)
+                    learnedMatchResult.matchedSignals.forEach { signal ->
+                        Text(
+                            text = "  • $signal",
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }

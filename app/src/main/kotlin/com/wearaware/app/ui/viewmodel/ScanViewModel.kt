@@ -1,7 +1,9 @@
 package com.wearaware.app.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wearaware.app.domain.model.KnownMatchConfidence
 import com.wearaware.app.domain.model.KnownTargetMatchInput
 import com.wearaware.app.domain.model.KnownTargetMatchResult
 import com.wearaware.app.domain.model.ObservedDevice
@@ -35,6 +37,8 @@ class ScanViewModel @Inject constructor(
 
     private val lastAlertedAt = mutableMapOf<String, Long>()
     private val loggedDeviceIds = mutableSetOf<String>()
+    /** Tracks devices whose STRONG/POSSIBLE match has already been logged this session. */
+    private val loggedLearnedMatchIds = mutableSetOf<String>()
 
     init {
         _uiState.update {
@@ -46,8 +50,11 @@ class ScanViewModel @Inject constructor(
         }
         val sig = knownTargetRepository.load()
         if (sig != null) {
+            Log.d(TAG, "Learned signature loaded: '${sig.displayName}' (fingerprintId=${sig.fingerprintId})")
             val learnedMatches = computeKnownTargetMatches(_uiState.value.devices, sig)
             _uiState.update { it.copy(knownTargetSignature = sig, learnedMatchResults = learnedMatches) }
+        } else {
+            Log.d(TAG, "No learned signature found in storage")
         }
     }
 
@@ -67,6 +74,7 @@ class ScanViewModel @Inject constructor(
         bleRepository.stopScanning()
         lastAlertedAt.clear()
         loggedDeviceIds.clear()
+        loggedLearnedMatchIds.clear()
         _uiState.update {
             it.copy(
                 scanState = ScanState.STOPPED,
@@ -106,6 +114,9 @@ class ScanViewModel @Inject constructor(
     /** Called from ScanScreen on composition to pick up signatures saved via CaptureScreen. */
     fun reloadLearnedSignature() {
         val sig = knownTargetRepository.load()
+        if (sig != null) {
+            Log.d(TAG, "Learned signature reloaded: '${sig.displayName}' (fingerprintId=${sig.fingerprintId})")
+        }
         val learnedMatches = computeKnownTargetMatches(_uiState.value.devices, sig)
         _uiState.update { it.copy(knownTargetSignature = sig, learnedMatchResults = learnedMatches) }
     }
@@ -129,7 +140,16 @@ class ScanViewModel @Inject constructor(
                 visibleAtStop = false,
                 connectable = device.rawBleData?.isConnectable ?: false
             )
-            device.id to matchKnownTarget(input, sig)
+            val result = matchKnownTarget(input, sig)
+            if (result.confidence == KnownMatchConfidence.STRONG || result.confidence == KnownMatchConfidence.POSSIBLE) {
+                if (device.id !in loggedLearnedMatchIds) {
+                    loggedLearnedMatchIds.add(device.id)
+                    Log.d(TAG, "Learned match: ${result.confidence.name} for device ${device.id} " +
+                        "(score=${result.score}, labelOverride=${result.labelOverrideActive}, " +
+                        "label='${if (result.labelOverrideActive) sig.displayName else device.advertisedName ?: "raw"}')")
+                }
+            }
+            device.id to result
         }
     }
 
@@ -177,5 +197,9 @@ class ScanViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         bleRepository.stopScanning()
+    }
+
+    companion object {
+        private const val TAG = "WearAware.ScanVM"
     }
 }
