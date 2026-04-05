@@ -14,7 +14,6 @@ import com.wearaware.app.domain.model.CaptureType
 import com.wearaware.app.domain.model.CompareConfidence
 import com.wearaware.app.domain.model.CompareMatchResult
 import com.wearaware.app.ui.viewmodel.CaptureState
-import com.wearaware.app.ui.viewmodel.CaptureUiState
 import com.wearaware.app.ui.viewmodel.CaptureViewModel
 import com.wearaware.app.util.formatDuration
 
@@ -191,14 +190,19 @@ private fun CompareResultsSection(
             )
         } else {
             safeResults.forEachIndexed { index, result ->
-                val isTopCandidate = index == 0 &&
-                    (result.confidence == CompareConfidence.HIGH ||
-                        result.confidence == CompareConfidence.MEDIUM)
-                CompareResultCard(
-                    result = result,
-                    isTopCandidate = isTopCandidate,
-                    onViewDevice = onViewDevice
-                )
+                // key() ensures Compose maps each card to its device fingerprint, not its
+                // list position — prevents slot reuse when result count changes between
+                // recompositions (e.g. after a re-capture produces a different result set).
+                key(result.capturedDevice.fingerprintId) {
+                    val isTopCandidate = index == 0 &&
+                        (result.confidence == CompareConfidence.HIGH ||
+                            result.confidence == CompareConfidence.MEDIUM)
+                    CompareResultCard(
+                        result = result,
+                        isTopCandidate = isTopCandidate,
+                        onViewDevice = onViewDevice
+                    )
+                }
             }
         }
     }
@@ -278,11 +282,13 @@ private fun CompareResultCard(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Why this device:", style = MaterialTheme.typography.labelSmall)
                 result.comparisonSignals.forEach { signal ->
-                    Text(
-                        "  • $signal",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    key(signal) {
+                        Text(
+                            "  • $signal",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
