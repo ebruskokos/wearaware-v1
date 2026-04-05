@@ -272,20 +272,69 @@ fun DeviceDetailScreen(
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (profile != null) {
-                    Text(
-                        "Avg RSSI: ${profile.typicalRssiAtClose} dBm  " +
-                            "(${profile.rssiSampleCount.coerceAtLeast(1)} samples)",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    if (profile.maxSeenCount > 0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // RSSI trend: compare live device RSSI to learned average
+                    val liveRssi = device.averagedRssi
+                    val learnedAvg = profile.typicalRssiAtClose
+                    val rssiDelta = liveRssi - learnedAvg
+                    val trendLabel = when {
+                        rssiDelta >= 5 -> "↑ Stronger than usual (+${rssiDelta} dBm)"
+                        rssiDelta <= -5 -> "↓ Weaker than usual (${rssiDelta} dBm)"
+                        else -> "≈ Typical signal (${if (rssiDelta >= 0) "+$rssiDelta" else "$rssiDelta"} dBm)"
+                    }
+                    val trendColor = when {
+                        rssiDelta >= 5 -> MaterialTheme.colorScheme.primary
+                        rssiDelta <= -5 -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.secondary
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            "Persistence range: ${profile.minSeenCount}–${profile.maxSeenCount} observations",
+                            "Signal now: ${liveRssi} dBm",
                             style = MaterialTheme.typography.bodySmall
                         )
+                        Text(trendLabel, style = MaterialTheme.typography.bodySmall, color = trendColor)
                     }
+                    Text(
+                        "Learned avg: ${learnedAvg} dBm  (${profile.rssiSampleCount.coerceAtLeast(1)} samples)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // RSSI quality bar: map -40 (best) to -90 (worst) → 0..1
+                    val rssiProgress = ((liveRssi.coerceIn(-90, -40) + 90).toFloat() / 50f)
+                    val rssiBarColor = when {
+                        liveRssi >= -60 -> MaterialTheme.colorScheme.primary
+                        liveRssi >= -70 -> MaterialTheme.colorScheme.secondary
+                        liveRssi >= -80 -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.error
+                    }
+                    LinearProgressIndicator(
+                        progress = { rssiProgress },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        color = rssiBarColor
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    if (profile.maxSeenCount > 0) {
+                        // Persistence range bar
+                        val persistencePct = (device.seenCount.coerceIn(0, profile.maxSeenCount)
+                            .toFloat() / profile.maxSeenCount.coerceAtLeast(1).toFloat())
+                        Text(
+                            "Persistence: ${device.seenCount} now  •  range ${profile.minSeenCount}–${profile.maxSeenCount}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        LinearProgressIndicator(
+                            progress = { persistencePct },
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+
                     if (profile.totalObservations > 0) {
-                        val visiblePct = if (profile.totalObservations > 0)
-                            (profile.visibleAtStopCount * 100) / profile.totalObservations else 0
+                        val visiblePct = (profile.visibleAtStopCount * 100) / profile.totalObservations
                         Text(
                             "Visible at stop: ${profile.visibleAtStopCount}/${profile.totalObservations} sessions ($visiblePct%)",
                             style = MaterialTheme.typography.bodySmall
@@ -293,6 +342,7 @@ fun DeviceDetailScreen(
                     }
                 }
                 if (sig.manufacturerDataPrefixes.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text("Learned prefixes (top ${sig.manufacturerDataPrefixes.size}):",
                         style = MaterialTheme.typography.labelSmall)
                     sig.manufacturerDataPrefixes.forEach { prefix ->
