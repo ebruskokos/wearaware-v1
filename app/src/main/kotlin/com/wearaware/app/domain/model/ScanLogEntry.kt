@@ -1,12 +1,5 @@
 package com.wearaware.app.domain.model
 
-/**
- * PURPOSE: Domain representation of a single session log entry. Mirrors ScanLogEntity
- *   but without Room annotations, keeping domain layer free of Android dependencies.
- * LIMITATIONS: Enum fields are stored as String names (not ordinals) for readability
- *   and forward compatibility.
- * NOTES: evaluationNotes is stored to enable future rule tuning and debugging analysis.
- */
 data class ScanLogEntry(
     val id: Long = 0,
     val timestamp: Long,
@@ -22,8 +15,13 @@ data class ScanLogEntry(
     val confidence: String,
     val evaluationNotes: String?,
     val fingerprintId: String? = null,
-    val manufacturerIds: String? = null,     // stored as comma-separated hex (e.g. "0075,004C")
+    val manufacturerIds: String? = null,       // comma-separated hex e.g. "0075,004c"
     val targetMatchScore: Int? = null,
     val targetMatchReason: String? = null,
-    val isTopCandidate: Boolean = false
+    val isTopCandidate: Boolean = false,
+    val manufacturerDataHex: String? = null,   // "companyId:hex,companyId:hex" e.g. "0075:deadbeef"
+    val serviceUuids: String? = null,          // comma-separated UUID list
+    val txPower: Int? = null,
+    val connectable: Boolean = false,
+    val rawScanBytesHex: String? = null        // first 32 bytes as hex (truncated for storage)
 )

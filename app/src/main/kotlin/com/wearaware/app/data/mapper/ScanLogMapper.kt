@@ -5,18 +5,6 @@ import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.ScanLogEntry
 import com.wearaware.app.domain.model.TargetMatchResult
 
-/**
- * PURPOSE: Bidirectional mapping between ObservedDevice/ScanLogEntry (domain) and
- *   ScanLogEntity (Room). Ensures domain and data layers share no types.
- * NOTES: Enum fields are converted to/from their .name String to keep Room schema
- *   readable and forward-compatible (adding new enum values doesn't break old rows).
- */
-
-/**
- * Maps an ObservedDevice to a ScanLogEntity ready for Room insertion.
- * Timestamp is set to the current time at mapping — not the device's lastSeenAt —
- * because this represents the moment of logging, not the last BLE event.
- */
 fun ObservedDevice.toScanLogEntity(matchResult: TargetMatchResult? = null): ScanLogEntity = ScanLogEntity(
     timestamp = System.currentTimeMillis(),
     deviceId = id,
@@ -35,10 +23,18 @@ fun ObservedDevice.toScanLogEntity(matchResult: TargetMatchResult? = null): Scan
         ?.joinToString(",") { it.toString(16).padStart(4, '0') },
     targetMatchScore = matchResult?.score,
     targetMatchReason = matchResult?.matchedSignals?.joinToString("; "),
-    isTopCandidate = matchResult?.isTopCandidate ?: false
+    isTopCandidate = matchResult?.isTopCandidate ?: false,
+    manufacturerDataHex = fingerprint?.manufacturerDataHex
+        ?.entries?.joinToString(",") { (id, hex) ->
+            "${id.toString(16).padStart(4, '0')}:$hex"
+        },
+    serviceUuids = fingerprint?.serviceUuids?.joinToString(",")?.takeIf { it.isNotEmpty() },
+    txPower = fingerprint?.txPower,
+    connectable = rawBleData?.isConnectable ?: false,
+    // Store first 32 bytes (64 hex chars) to keep log rows compact
+    rawScanBytesHex = rawBleData?.rawScanBytesHex?.take(64)
 )
 
-/** Maps a Room ScanLogEntity to the domain ScanLogEntry. */
 fun ScanLogEntity.toDomain(): ScanLogEntry = ScanLogEntry(
     id = id,
     timestamp = timestamp,
@@ -57,5 +53,10 @@ fun ScanLogEntity.toDomain(): ScanLogEntry = ScanLogEntry(
     manufacturerIds = manufacturerIds,
     targetMatchScore = targetMatchScore,
     targetMatchReason = targetMatchReason,
-    isTopCandidate = isTopCandidate
+    isTopCandidate = isTopCandidate,
+    manufacturerDataHex = manufacturerDataHex,
+    serviceUuids = serviceUuids,
+    txPower = txPower,
+    connectable = connectable,
+    rawScanBytesHex = rawScanBytesHex
 )

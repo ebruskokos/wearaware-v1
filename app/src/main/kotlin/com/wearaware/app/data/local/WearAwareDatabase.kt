@@ -8,9 +8,10 @@ import androidx.room.RoomDatabase
  *   1 → initial schema
  *   2 → added targetMatchScore, targetMatchReason, isTopCandidate (plan superseded)
  *   3 → added fingerprintId, manufacturerIds (BLE intelligence upgrade)
+ *   4 → added manufacturerDataHex, serviceUuids, txPower, connectable, rawScanBytesHex
  * NOTES: fallbackToDestructiveMigration used — session logs are ephemeral and user-clearable.
  */
-@Database(entities = [ScanLogEntity::class], version = 3, exportSchema = false)
+@Database(entities = [ScanLogEntity::class], version = 4, exportSchema = false)
 abstract class WearAwareDatabase : RoomDatabase() {
     abstract fun scanLogDao(): ScanLogDao
 

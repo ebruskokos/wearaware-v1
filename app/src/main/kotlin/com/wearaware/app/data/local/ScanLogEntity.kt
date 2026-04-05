@@ -4,12 +4,6 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-/**
- * PURPOSE: Room entity for the local session scan log table.
- *   Mirrors ScanLogEntry domain model but with Room annotations.
- * NOTES: Enum fields stored as String names (not ordinals) for forward compatibility
- *   and readability when querying the database directly.
- */
 @Entity(tableName = "scan_log")
 data class ScanLogEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -29,5 +23,10 @@ data class ScanLogEntity(
     @ColumnInfo(defaultValue = "NULL") val manufacturerIds: String? = null,
     @ColumnInfo(defaultValue = "NULL") val targetMatchScore: Int? = null,
     @ColumnInfo(defaultValue = "NULL") val targetMatchReason: String? = null,
-    @ColumnInfo(defaultValue = "0") val isTopCandidate: Boolean = false
+    @ColumnInfo(defaultValue = "0") val isTopCandidate: Boolean = false,
+    @ColumnInfo(defaultValue = "NULL") val manufacturerDataHex: String? = null,
+    @ColumnInfo(defaultValue = "NULL") val serviceUuids: String? = null,
+    @ColumnInfo(defaultValue = "NULL") val txPower: Int? = null,
+    @ColumnInfo(defaultValue = "0") val connectable: Boolean = false,
+    @ColumnInfo(defaultValue = "NULL") val rawScanBytesHex: String? = null
 )
