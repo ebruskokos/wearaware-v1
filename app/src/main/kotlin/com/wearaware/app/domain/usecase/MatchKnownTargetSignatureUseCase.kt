@@ -149,7 +149,8 @@ class MatchKnownTargetSignatureUseCase @Inject constructor() {
             score = score,
             confidence = confidence,
             matchedSignals = signals,
-            labelOverrideActive = confidence == KnownMatchConfidence.STRONG || confidence == KnownMatchConfidence.POSSIBLE
+            labelOverrideActive = confidence == KnownMatchConfidence.STRONG || confidence == KnownMatchConfidence.POSSIBLE,
+            hasStructuralSignal = hasStructuralSignal
         )
     }
 }

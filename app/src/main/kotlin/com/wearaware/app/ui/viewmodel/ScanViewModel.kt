@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.GsonBuilder
+import com.wearaware.app.domain.model.DeviceTemporalState
 import com.wearaware.app.domain.model.KnownMatchConfidence
 import com.wearaware.app.domain.model.KnownTargetMatchInput
 import com.wearaware.app.domain.model.KnownTargetMatchResult
@@ -15,6 +16,7 @@ import com.wearaware.app.domain.repository.BleRepository
 import com.wearaware.app.domain.repository.KnownTargetRepository
 import com.wearaware.app.domain.repository.LearningSessionRepository
 import com.wearaware.app.domain.usecase.*
+import com.wearaware.app.domain.usecase.ApplyTemporalMatchFilterUseCase
 import com.wearaware.app.domain.usecase.MatchKnownTargetSignatureUseCase
 import com.wearaware.app.domain.usecase.RefineKnownTargetFromObservationUseCase
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +39,7 @@ class ScanViewModel @Inject constructor(
     private val knownTargetRepository: KnownTargetRepository,
     private val refineKnownTarget: RefineKnownTargetFromObservationUseCase,
     private val learningSessionRepository: LearningSessionRepository,
+    private val applyTemporalFilter: ApplyTemporalMatchFilterUseCase,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -44,6 +47,8 @@ class ScanViewModel @Inject constructor(
 
     private val lastAlertedAt = mutableMapOf<String, Long>()
     private val loggedDeviceIds = mutableSetOf<String>()
+    /** Temporal state per device ID — reset on stopScanning(). */
+    private val deviceTemporalStates = mutableMapOf<String, DeviceTemporalState>()
 
     init {
         _uiState.update {
@@ -79,6 +84,7 @@ class ScanViewModel @Inject constructor(
         bleRepository.stopScanning()
         lastAlertedAt.clear()
         loggedDeviceIds.clear()
+        deviceTemporalStates.clear()
         _uiState.update {
             it.copy(
                 scanState = ScanState.STOPPED,
@@ -133,6 +139,7 @@ class ScanViewModel @Inject constructor(
             Log.d(TAG, "No learned signature — skipping match")
             return emptyMap()
         }
+        val now = System.currentTimeMillis()
         return devices.associate { device ->
             val input = KnownTargetMatchInput(
                 fingerprintId = device.id,
@@ -147,14 +154,32 @@ class ScanViewModel @Inject constructor(
                 visibleAtStop = false,
                 connectable = device.rawBleData?.isConnectable ?: false
             )
-            val result = matchKnownTarget(input, sig)
-            Log.d(TAG, "Device: ${device.id}, Match: ${result.confidence.name}, Score: ${result.score}")
-            when (result.confidence) {
+            val rawResult = matchKnownTarget(input, sig)
+
+            // Apply temporal filter (decay, smoothing, variance, hysteresis)
+            val temporalState = deviceTemporalStates[device.id] ?: DeviceTemporalState()
+            val filterResult = applyTemporalFilter(
+                rawResult = rawResult,
+                state = temporalState,
+                currentRssi = device.averagedRssi,
+                visibilityState = device.visibilityState,
+                lastSeenAtMs = device.lastSeenAt,
+                nowMs = now
+            )
+            deviceTemporalStates[device.id] = filterResult.updatedState
+
+            val final = filterResult.adjustedResult
+            Log.d(TAG, "Device: ${device.id}  rawScore=${rawResult.score}  " +
+                "confidence=${final.confidence.name}  stable=${filterResult.updatedState.stableObservationCount}")
+            if (final.temporalNotes.isNotEmpty()) {
+                Log.d(TAG, "  temporal: ${final.temporalNotes.joinToString(" | ")}")
+            }
+            when (final.confidence) {
                 KnownMatchConfidence.STRONG -> Log.d(TAG, "OVERRIDE → ${sig.displayName} (device ${device.id})")
                 KnownMatchConfidence.POSSIBLE -> Log.d(TAG, "OVERRIDE → Possible match (device ${device.id})")
                 else -> Unit
             }
-            device.id to result
+            device.id to final
         }
     }
 

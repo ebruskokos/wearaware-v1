@@ -254,6 +254,17 @@ fun DeviceDetailScreen(
                         )
                     }
                 }
+                if (learnedMatchResult.temporalNotes.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Temporal filter:", style = MaterialTheme.typography.labelSmall)
+                    learnedMatchResult.temporalNotes.forEach { note ->
+                        Text(
+                            text = "  • $note",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
 
             // --- Training & Learned Profile ---
