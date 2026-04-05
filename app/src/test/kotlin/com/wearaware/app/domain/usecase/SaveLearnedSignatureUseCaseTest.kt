@@ -4,12 +4,19 @@ import com.wearaware.app.domain.model.*
 import com.wearaware.app.domain.repository.LearnedSignatureRepository
 import io.mockk.*
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 
 class SaveLearnedSignatureUseCaseTest {
 
-    private val repo = mockk<LearnedSignatureRepository>(relaxed = true)
-    private val useCase = SaveLearnedSignatureUseCase(repo)
+    private lateinit var repo: LearnedSignatureRepository
+    private lateinit var useCase: SaveLearnedSignatureUseCase
+
+    @Before
+    fun setUp() {
+        repo = mockk(relaxed = true)
+        useCase = SaveLearnedSignatureUseCase(repo)
+    }
 
     private fun makeDevice(
         fingerprintId: String = "fp-abc",
