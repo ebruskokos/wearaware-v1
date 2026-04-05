@@ -159,6 +159,9 @@ private fun CompareResultsSection(
     hasBaseline: Boolean,
     onViewDevice: (String) -> Unit
 ) {
+    // Snapshot to prevent list mutation during composition
+    val safeResults = results.toList()
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Compare Results", style = MaterialTheme.typography.titleSmall)
 
@@ -177,24 +180,26 @@ private fun CompareResultsSection(
             }
         }
 
-        if (results.isEmpty()) {
+        // Use if/else instead of early return — early return inside a @Composable lambda
+        // causes startGroup/endGroup mismatches in Compose's slot table, crashing with
+        // IndexOutOfBoundsException: Index -1 out of bounds (Stack.pop on empty stack).
+        if (safeResults.isEmpty()) {
             Text(
                 "No strong differential match found yet.\nTry a longer capture or move closer to your target device.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            return@Column
-        }
-
-        results.forEachIndexed { index, result ->
-            val isTopCandidate = index == 0 &&
-                (result.confidence == CompareConfidence.HIGH ||
-                    result.confidence == CompareConfidence.MEDIUM)
-            CompareResultCard(
-                result = result,
-                isTopCandidate = isTopCandidate,
-                onViewDevice = onViewDevice
-            )
+        } else {
+            safeResults.forEachIndexed { index, result ->
+                val isTopCandidate = index == 0 &&
+                    (result.confidence == CompareConfidence.HIGH ||
+                        result.confidence == CompareConfidence.MEDIUM)
+                CompareResultCard(
+                    result = result,
+                    isTopCandidate = isTopCandidate,
+                    onViewDevice = onViewDevice
+                )
+            }
         }
     }
 }
