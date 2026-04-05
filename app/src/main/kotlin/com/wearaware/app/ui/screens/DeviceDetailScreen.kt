@@ -34,6 +34,7 @@ fun DeviceDetailScreen(
     deviceId: String,
     onBack: () -> Unit,
     onPairAndLearnClick: () -> Unit = {},
+    onViewSignature: () -> Unit = {},
     viewModel: ScanViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -315,6 +316,10 @@ fun DeviceDetailScreen(
                         onClick = onPairAndLearnClick,
                         modifier = Modifier.weight(1f)
                     ) { Text("Training", style = MaterialTheme.typography.labelSmall) }
+                    OutlinedButton(
+                        onClick = onViewSignature,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Logs", style = MaterialTheme.typography.labelSmall) }
                     OutlinedButton(
                         onClick = {
                             scope.launch {

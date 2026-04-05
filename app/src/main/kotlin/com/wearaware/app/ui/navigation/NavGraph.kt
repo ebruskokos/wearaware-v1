@@ -14,6 +14,7 @@ import com.wearaware.app.ui.screens.LearningSessionDetailScreen
 import com.wearaware.app.ui.screens.PairAndLearnScreen
 import com.wearaware.app.ui.screens.ScanScreen
 import com.wearaware.app.ui.screens.SessionLogScreen
+import com.wearaware.app.ui.screens.SignatureLogViewerScreen
 import com.wearaware.app.ui.viewmodel.CaptureViewModel
 import com.wearaware.app.ui.viewmodel.ScanViewModel
 
@@ -32,6 +33,7 @@ sealed class Screen(val route: String) {
     object LearningSessionDetail : Screen("learning_session/{sessionId}") {
         fun routeFor(sessionId: String) = "learning_session/$sessionId"
     }
+    object SignatureLogViewer : Screen("signature_log_viewer")
 }
 
 @Composable
@@ -61,6 +63,7 @@ fun WearAwareNavGraph(navController: NavHostController) {
                 deviceId = deviceId,
                 onBack = { navController.popBackStack() },
                 onPairAndLearnClick = { navController.navigate(Screen.PairAndLearn.route) },
+                onViewSignature = { navController.navigate(Screen.SignatureLogViewer.route) },
                 viewModel = viewModel
             )
         }
@@ -91,8 +94,12 @@ fun WearAwareNavGraph(navController: NavHostController) {
         composable(Screen.PairAndLearn.route) {
             PairAndLearnScreen(
                 onBack = { navController.popBackStack() },
-                onViewLog = { navController.navigate(Screen.LearningLog.route) }
+                onViewLog = { navController.navigate(Screen.LearningLog.route) },
+                onViewSignature = { navController.navigate(Screen.SignatureLogViewer.route) }
             )
+        }
+        composable(Screen.SignatureLogViewer.route) {
+            SignatureLogViewerScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.LearningLog.route) {
             LearningLogScreen(

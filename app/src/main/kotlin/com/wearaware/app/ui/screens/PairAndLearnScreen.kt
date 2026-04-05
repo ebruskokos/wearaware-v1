@@ -26,6 +26,7 @@ import com.wearaware.app.ui.viewmodel.PairingFlowState
 fun PairAndLearnScreen(
     onBack: () -> Unit,
     onViewLog: () -> Unit,
+    onViewSignature: () -> Unit = {},
     viewModel: PairAndLearnViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -57,6 +58,9 @@ fun PairAndLearnScreen(
                     }
                 },
                 actions = {
+                    TextButton(onClick = onViewSignature) {
+                        Text("Signature", style = MaterialTheme.typography.labelSmall)
+                    }
                     TextButton(onClick = onViewLog) {
                         Text("History", style = MaterialTheme.typography.labelSmall)
                     }
