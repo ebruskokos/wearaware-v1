@@ -6,6 +6,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.wearaware.app.ui.screens.CaptureScreen
 import com.wearaware.app.ui.screens.DeviceDetailScreen
 import com.wearaware.app.ui.screens.ScanScreen
 import com.wearaware.app.ui.screens.SessionLogScreen
@@ -17,6 +18,7 @@ sealed class Screen(val route: String) {
         fun routeFor(deviceId: String) = "device/$deviceId"
     }
     object SessionLog : Screen("session_log")
+    object Capture : Screen("capture")
 }
 
 @Composable
@@ -26,6 +28,9 @@ fun WearAwareNavGraph(navController: NavHostController) {
             ScanScreen(
                 onDeviceClick = { deviceId ->
                     navController.navigate(Screen.DeviceDetail.routeFor(deviceId))
+                },
+                onCaptureClick = {
+                    navController.navigate(Screen.Capture.route)
                 }
             )
         }
@@ -44,6 +49,14 @@ fun WearAwareNavGraph(navController: NavHostController) {
         }
         composable(Screen.SessionLog.route) {
             SessionLogScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.Capture.route) {
+            CaptureScreen(
+                onBack = { navController.popBackStack() },
+                onViewDeviceDetail = { deviceId ->
+                    navController.navigate(Screen.DeviceDetail.routeFor(deviceId))
+                }
+            )
         }
     }
 }

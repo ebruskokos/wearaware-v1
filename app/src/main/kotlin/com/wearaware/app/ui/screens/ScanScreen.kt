@@ -26,6 +26,7 @@ import com.wearaware.app.util.PermissionUtils
 @Composable
 fun ScanScreen(
     onDeviceClick: (String) -> Unit,
+    onCaptureClick: () -> Unit,
     viewModel: ScanViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -43,6 +44,12 @@ fun ScanScreen(
             TopAppBar(
                 title = { Text("WearAware") },
                 actions = {
+                    TextButton(onClick = onCaptureClick) {
+                        Text(
+                            text = "Compare",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                     if (uiState.scanState == ScanState.SCANNING) {
                         TextButton(onClick = { viewModel.toggleFocusMode() }) {
                             Text(
