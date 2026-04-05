@@ -66,9 +66,9 @@ class LearnedSignatureRepositoryImplTest {
     }
 
     @Test
-    fun `save persists JSON and calls apply`() {
+    fun `save persists JSON and commits synchronously`() {
         repo.save(testSignature)
         verify { editor.putString(KEY_LEARNED_SIGNATURE, any()) }
-        verify { editor.apply() }
+        verify { editor.commit() }
     }
 }

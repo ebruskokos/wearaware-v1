@@ -47,7 +47,8 @@ class ScanViewModel @Inject constructor(
         }
         val sig = learnedSignatureRepository.load()
         if (sig != null) {
-            _uiState.update { it.copy(learnedSignature = sig) }
+            val learnedMatches = computeLearnedMatches(_uiState.value.devices, sig)
+            _uiState.update { it.copy(learnedSignature = sig, learnedMatchResults = learnedMatches) }
         }
     }
 

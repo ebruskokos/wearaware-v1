@@ -21,7 +21,8 @@ class LearnedSignatureRepositoryImpl @Inject constructor(
     }
 
     override fun save(signature: LearnedDeviceSignature) {
-        prefs.edit().putString(KEY_LEARNED_SIGNATURE, gson.toJson(signature)).apply()
+        // commit() instead of apply() — user-initiated save must survive an immediate process kill
+        prefs.edit().putString(KEY_LEARNED_SIGNATURE, gson.toJson(signature)).commit()
     }
 
     override fun clear() {
