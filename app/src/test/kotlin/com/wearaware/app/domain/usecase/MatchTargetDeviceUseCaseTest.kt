@@ -1,6 +1,7 @@
 package com.wearaware.app.domain.usecase
 
 import com.wearaware.app.domain.model.*
+import com.wearaware.app.domain.model.ScanFilter
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -181,5 +182,100 @@ class MatchTargetDeviceUseCaseTest {
         val result = results[device.id]!!
         assertTrue("Meta company ID should contribute +3 to score", result.score >= 3)
         assertTrue(result.matchedSignals.any { it.contains("Manufacturer match") })
+    }
+
+    @Test
+    fun `Apple manufacturer only device is not eligible as Meta glasses candidate`() {
+        val now = System.currentTimeMillis()
+        val appleDevice = ObservedDevice(
+            id = "apple1",
+            advertisedName = null,
+            rawRssi = -55,
+            averagedRssi = -55,
+            proximityLabel = ProximityLabel.VERY_CLOSE,
+            visibilityState = VisibilityState.DETECTED_NOW,
+            firstSeenAt = now - 60_000L,
+            lastSeenAt = now,
+            seenCount = 30,
+            classification = ClassificationResult(
+                matchedRuleId = null,
+                ruleVersion = null,
+                category = DeviceCategory.UNKNOWN_BLE_DEVICE,
+                displayLabel = "Unknown",
+                confidence = ConfidenceLevel.LOW,
+                isWearableCandidate = false,
+                evaluationNotes = null
+            ),
+            persistenceAlert = null,
+            companyNames = listOf("Apple")
+        )
+        val results = useCase(listOf(appleDevice), profile)
+        val result = results[appleDevice.id]!!
+        // Apple company name alone is NOT a Meta identity signal
+        assertEquals("Apple-only must not be eligible", MatchConfidence.NONE, result.confidence)
+        assertEquals(0, result.score)
+        assertFalse(result.isTopCandidate)
+    }
+
+    @Test
+    fun `Meta manufacturer with wearable classification outranks Apple-only device`() {
+        val now = System.currentTimeMillis()
+        val appleDevice = ObservedDevice(
+            id = "apple2",
+            advertisedName = null,
+            rawRssi = -50,
+            averagedRssi = -50,
+            proximityLabel = ProximityLabel.VERY_CLOSE,
+            visibilityState = VisibilityState.DETECTED_NOW,
+            firstSeenAt = now,
+            lastSeenAt = now,
+            seenCount = 1,
+            classification = ClassificationResult(
+                matchedRuleId = null, ruleVersion = null,
+                category = DeviceCategory.UNKNOWN_BLE_DEVICE,
+                displayLabel = "Unknown", confidence = ConfidenceLevel.LOW,
+                isWearableCandidate = false, evaluationNotes = null
+            ),
+            persistenceAlert = null,
+            companyNames = listOf("Apple")
+        )
+        val metaDevice = makeDevice(
+            id = "meta2",
+            category = DeviceCategory.CAMERA_CAPABLE_WEARABLE,
+            matchedRuleId = "meta_rayban_v1"
+        )
+        val results = useCase(listOf(appleDevice, metaDevice), profile)
+        assertTrue(
+            "Meta+wearable score (${results["meta2"]!!.score}) should beat Apple-only (${results["apple2"]!!.score})",
+            results["meta2"]!!.score > results["apple2"]!!.score
+        )
+        assertTrue(results["meta2"]!!.isTopCandidate)
+        assertFalse(results["apple2"]!!.isTopCandidate)
+    }
+
+    @Test
+    fun `Apple is visible in ALL filter but hidden in HIDE_APPLE filter`() {
+        val now = System.currentTimeMillis()
+        val appleDevice = ObservedDevice(
+            id = "apple3",
+            advertisedName = "iPhone",
+            rawRssi = -60,
+            averagedRssi = -60,
+            proximityLabel = ProximityLabel.STRONG,
+            visibilityState = VisibilityState.DETECTED_NOW,
+            firstSeenAt = now,
+            lastSeenAt = now,
+            seenCount = 1,
+            classification = ClassificationResult(
+                matchedRuleId = null, ruleVersion = null,
+                category = DeviceCategory.UNKNOWN_BLE_DEVICE,
+                displayLabel = "Unknown", confidence = ConfidenceLevel.LOW,
+                isWearableCandidate = false, evaluationNotes = null
+            ),
+            persistenceAlert = null,
+            companyNames = listOf("Apple")
+        )
+        assertTrue("Apple device should pass ALL filter", ScanFilter.ALL.matches(appleDevice))
+        assertFalse("Apple device should not pass HIDE_APPLE filter", ScanFilter.HIDE_APPLE.matches(appleDevice))
     }
 }
