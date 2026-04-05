@@ -1,15 +1,16 @@
 package com.wearaware.app.ui.screens
 
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.wearaware.app.domain.model.BleDebugData
@@ -23,6 +24,9 @@ import com.wearaware.app.ui.components.VisibilityBadge
 import com.wearaware.app.ui.viewmodel.ScanViewModel
 import com.wearaware.app.util.formatDuration
 import com.wearaware.app.util.formatFullTimestamp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +40,8 @@ fun DeviceDetailScreen(
     val device: ObservedDevice? = uiState.devices.firstOrNull { it.id == deviceId }
     val matchResult = uiState.deviceMatchScores[deviceId]
     val learnedMatchResult = uiState.learnedMatchResults[deviceId]
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -309,6 +315,22 @@ fun DeviceDetailScreen(
                         onClick = onPairAndLearnClick,
                         modifier = Modifier.weight(1f)
                     ) { Text("Training", style = MaterialTheme.typography.labelSmall) }
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                val json = withContext(Dispatchers.IO) { viewModel.buildExportJson() }
+                                if (json != null) {
+                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "application/json"
+                                        putExtra(Intent.EXTRA_TEXT, json)
+                                        putExtra(Intent.EXTRA_SUBJECT, "WearAware Signature Export")
+                                    }
+                                    context.startActivity(Intent.createChooser(intent, "Export Signature"))
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Export", style = MaterialTheme.typography.labelSmall) }
                 }
             }
 

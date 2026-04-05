@@ -3,6 +3,7 @@ package com.wearaware.app.ui.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.GsonBuilder
 import com.wearaware.app.domain.model.KnownMatchConfidence
 import com.wearaware.app.domain.model.KnownTargetMatchInput
 import com.wearaware.app.domain.model.KnownTargetMatchResult
@@ -12,6 +13,7 @@ import com.wearaware.app.domain.model.ScanFilter
 import com.wearaware.app.domain.model.VisibilityState
 import com.wearaware.app.domain.repository.BleRepository
 import com.wearaware.app.domain.repository.KnownTargetRepository
+import com.wearaware.app.domain.repository.LearningSessionRepository
 import com.wearaware.app.domain.usecase.*
 import com.wearaware.app.domain.usecase.MatchKnownTargetSignatureUseCase
 import com.wearaware.app.domain.usecase.RefineKnownTargetFromObservationUseCase
@@ -34,6 +36,7 @@ class ScanViewModel @Inject constructor(
     private val matchKnownTarget: MatchKnownTargetSignatureUseCase,
     private val knownTargetRepository: KnownTargetRepository,
     private val refineKnownTarget: RefineKnownTargetFromObservationUseCase,
+    private val learningSessionRepository: LearningSessionRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -207,6 +210,26 @@ class ScanViewModel @Inject constructor(
             Log.d(TAG, "Signature refined from live device: learnCount=${refined.learnCount}")
             reloadLearnedSignature()
         }
+    }
+
+    /**
+     * Serialises the learned signature + latest session events to a pretty-printed JSON string.
+     * Returns null if no signature exists. Caller should dispatch to IO before calling.
+     */
+    suspend fun buildExportJson(): String? {
+        val sig = _uiState.value.knownTargetSignature ?: return null
+        val sessions = learningSessionRepository.getAllSessions()
+        val latestSession = sessions.maxByOrNull { it.startedAt }
+        val events = if (latestSession != null)
+            learningSessionRepository.getEventsForSession(latestSession.sessionId)
+        else emptyList()
+        val export = mapOf(
+            "learnedSignature" to sig,
+            "sessionCount" to sessions.size,
+            "latestSession" to latestSession,
+            "latestSessionEvents" to events
+        )
+        return GsonBuilder().setPrettyPrinting().create().toJson(export)
     }
 
     private fun deviceIsSignalLost(devices: List<ObservedDevice>, deviceId: String): Boolean =
