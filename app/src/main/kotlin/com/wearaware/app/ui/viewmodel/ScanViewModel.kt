@@ -105,7 +105,29 @@ class ScanViewModel @Inject constructor(
     /** Called from ScanScreen on composition to pick up signatures saved via CaptureScreen. */
     fun reloadLearnedSignature() {
         val sig = learnedSignatureRepository.load()
-        _uiState.update { it.copy(learnedSignature = sig) }
+        val learnedMatches = computeLearnedMatches(_uiState.value.devices, sig)
+        _uiState.update { it.copy(learnedSignature = sig, learnedMatchResults = learnedMatches) }
+    }
+
+    private fun computeLearnedMatches(
+        devices: List<ObservedDevice>,
+        sig: com.wearaware.app.domain.model.LearnedDeviceSignature?
+    ): Map<String, LearnedMatchResult> {
+        if (sig == null) return emptyMap()
+        return devices.associate { device ->
+            val input = LearnedMatchInput(
+                fingerprintId = device.id,
+                manufacturerIds = device.fingerprint?.manufacturerIds ?: emptyList(),
+                manufacturerDataPrefixes = extractPrefixesFromFingerprintMap(
+                    device.fingerprint?.manufacturerDataHex
+                ),
+                serviceUuids = device.fingerprint?.serviceUuids ?: emptyList(),
+                averageRssi = device.averagedRssi,
+                seenCount = device.seenCount,
+                visibleAtStop = false  // live scan — visibleAtStop is a capture-only concept
+            )
+            device.id to matchLearnedSignature(input, sig)
+        }
     }
 
     private fun processDeviceUpdate(devices: List<ObservedDevice>) {
@@ -134,25 +156,7 @@ class ScanViewModel @Inject constructor(
             else -> currentAlert
         }
 
-        val learnedSig = _uiState.value.learnedSignature
-        val learnedMatches: Map<String, LearnedMatchResult> = if (learnedSig != null) {
-            devices.associate { device ->
-                val input = LearnedMatchInput(
-                    fingerprintId = device.id,
-                    manufacturerIds = device.fingerprint?.manufacturerIds ?: emptyList(),
-                    manufacturerDataPrefixes = extractPrefixesFromFingerprintMap(
-                        device.fingerprint?.manufacturerDataHex
-                    ),
-                    serviceUuids = device.fingerprint?.serviceUuids ?: emptyList(),
-                    averageRssi = device.averagedRssi,
-                    seenCount = device.seenCount,
-                    visibleAtStop = false  // live scan — visibleAtStop is a capture-only concept
-                )
-                device.id to matchLearnedSignature(input, learnedSig)
-            }
-        } else {
-            emptyMap()
-        }
+        val learnedMatches = computeLearnedMatches(devices, _uiState.value.learnedSignature)
 
         _uiState.update {
             it.copy(
