@@ -27,6 +27,7 @@ import com.wearaware.app.util.PermissionUtils
 fun ScanScreen(
     onDeviceClick: (String) -> Unit,
     onCaptureClick: () -> Unit,
+    onPairAndLearnClick: () -> Unit,
     viewModel: ScanViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -50,6 +51,12 @@ fun ScanScreen(
             TopAppBar(
                 title = { Text("WearAware") },
                 actions = {
+                    TextButton(onClick = onPairAndLearnClick) {
+                        Text(
+                            text = "Pair & Learn",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                     TextButton(onClick = onCaptureClick) {
                         Text(
                             text = "Compare",

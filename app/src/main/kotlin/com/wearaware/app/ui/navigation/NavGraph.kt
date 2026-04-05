@@ -9,6 +9,9 @@ import androidx.navigation.compose.composable
 import com.wearaware.app.ui.screens.CaptureScreen
 import com.wearaware.app.ui.screens.CapturedDeviceDetailScreen
 import com.wearaware.app.ui.screens.DeviceDetailScreen
+import com.wearaware.app.ui.screens.LearningLogScreen
+import com.wearaware.app.ui.screens.LearningSessionDetailScreen
+import com.wearaware.app.ui.screens.PairAndLearnScreen
 import com.wearaware.app.ui.screens.ScanScreen
 import com.wearaware.app.ui.screens.SessionLogScreen
 import com.wearaware.app.ui.viewmodel.CaptureViewModel
@@ -24,6 +27,11 @@ sealed class Screen(val route: String) {
     object CaptureDeviceDetail : Screen("capture_device/{fingerprintId}") {
         fun routeFor(fingerprintId: String) = "capture_device/$fingerprintId"
     }
+    object PairAndLearn : Screen("pair_and_learn")
+    object LearningLog : Screen("learning_log")
+    object LearningSessionDetail : Screen("learning_session/{sessionId}") {
+        fun routeFor(sessionId: String) = "learning_session/$sessionId"
+    }
 }
 
 @Composable
@@ -36,6 +44,9 @@ fun WearAwareNavGraph(navController: NavHostController) {
                 },
                 onCaptureClick = {
                     navController.navigate(Screen.Capture.route)
+                },
+                onPairAndLearnClick = {
+                    navController.navigate(Screen.PairAndLearn.route)
                 }
             )
         }
@@ -74,6 +85,27 @@ fun WearAwareNavGraph(navController: NavHostController) {
                 fingerprintId = fingerprintId,
                 onBack = { navController.popBackStack() },
                 viewModel = viewModel
+            )
+        }
+        composable(Screen.PairAndLearn.route) {
+            PairAndLearnScreen(
+                onBack = { navController.popBackStack() },
+                onViewLog = { navController.navigate(Screen.LearningLog.route) }
+            )
+        }
+        composable(Screen.LearningLog.route) {
+            LearningLogScreen(
+                onBack = { navController.popBackStack() },
+                onSessionClick = { sessionId ->
+                    navController.navigate(Screen.LearningSessionDetail.routeFor(sessionId))
+                }
+            )
+        }
+        composable(Screen.LearningSessionDetail.route) { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
+            LearningSessionDetailScreen(
+                sessionId = sessionId,
+                onBack = { navController.popBackStack() }
             )
         }
     }
