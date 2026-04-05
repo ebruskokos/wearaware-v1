@@ -7,7 +7,7 @@ import com.wearaware.app.domain.repository.LearnedSignatureRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val KEY_LEARNED_SIGNATURE = "learned_device_signature"
+internal const val KEY_LEARNED_SIGNATURE = "learned_device_signature"
 
 @Singleton
 class LearnedSignatureRepositoryImpl @Inject constructor(
