@@ -134,4 +134,39 @@ class PairAndLearnViewModelTest {
         verify { knownTargetRepository.clear() }
         assertNull(viewModel.uiState.value.existingSignature)
     }
+
+    @Test
+    fun `recentEvents are populated after successful GATT flow`() = runTest {
+        coEvery { bleGattManager.connectAndDiscover("AA:BB:CC:DD:EE:FF") } returns testGattResult
+        coEvery { learningSessionRepository.createSession(any(), any()) } just Runs
+        coEvery { learningSessionRepository.updateStatus(any(), any()) } just Runs
+        coEvery { learningSessionRepository.updateDeviceAddress(any(), any()) } just Runs
+        coEvery { learningSessionRepository.updateFingerprintId(any(), any()) } just Runs
+        coEvery { logLearningEvent(any(), any(), any()) } returns PairedLearningEvent(
+            1L, "session-1", LearningEventType.SESSION_STARTED, 1000L, null
+        )
+
+        viewModel.onCdmAssociated("AA:BB:CC:DD:EE:FF", "session-1")
+        advanceUntilIdle()
+
+        assertTrue(
+            "recentEvents should be non-empty after flow completes",
+            viewModel.uiState.value.recentEvents.isNotEmpty()
+        )
+    }
+
+    @Test
+    fun `onCdmResult with OK result but no sessionId transitions to FAILED`() = runTest {
+        // sessionId starts null (never set by startPairing in this test)
+        // Simulate a successful CDM result arriving before a session was started
+        val mockIntent = mockk<android.content.Intent>()
+        every { mockIntent.getParcelableExtra<android.bluetooth.BluetoothDevice>(any()) } returns null
+
+        viewModel.onCdmResult(ActivityResult(Activity.RESULT_OK, mockIntent))
+        advanceUntilIdle()
+
+        // Without a device address we can't get far — but the null sessionId guard should fire
+        // The ViewModel will set FAILED because sessionId is null
+        assertEquals(PairingFlowState.FAILED, viewModel.uiState.value.flowState)
+    }
 }
