@@ -31,4 +31,11 @@ interface LearningSessionDao {
 
     @Query("SELECT * FROM learning_event WHERE sessionId = :sessionId ORDER BY occurredAt ASC")
     suspend fun getEventsForSession(sessionId: String): List<LearningEventEntity>
+
+    @Transaction
+    suspend fun insertEventAndIncrement(event: LearningEventEntity, sessionId: String): Long {
+        val id = insertEvent(event)
+        incrementEventCount(sessionId)
+        return id
+    }
 }

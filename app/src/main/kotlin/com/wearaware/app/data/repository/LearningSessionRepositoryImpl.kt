@@ -52,15 +52,15 @@ class LearningSessionRepositoryImpl @Inject constructor(
         occurredAt: Long,
         detail: String?
     ): PairedLearningEvent {
-        val id = dao.insertEvent(
+        val id = dao.insertEventAndIncrement(
             LearningEventEntity(
                 sessionId = sessionId,
                 eventType = eventType.name,
                 occurredAt = occurredAt,
                 detail = detail
-            )
+            ),
+            sessionId
         )
-        dao.incrementEventCount(sessionId)
         return PairedLearningEvent(
             eventId = id,
             sessionId = sessionId,
@@ -77,7 +77,7 @@ class LearningSessionRepositoryImpl @Inject constructor(
         sessionId = sessionId,
         startedAt = startedAt,
         completedAt = completedAt,
-        status = LearningSessionStatus.valueOf(status),
+        status = LearningSessionStatus.entries.firstOrNull { it.name == status } ?: LearningSessionStatus.FAILED,
         deviceAddress = deviceAddress,
         fingerprintId = fingerprintId,
         eventCount = eventCount
@@ -86,7 +86,7 @@ class LearningSessionRepositoryImpl @Inject constructor(
     private fun LearningEventEntity.toDomain() = PairedLearningEvent(
         eventId = eventId,
         sessionId = sessionId,
-        eventType = LearningEventType.valueOf(eventType),
+        eventType = LearningEventType.entries.firstOrNull { it.name == eventType } ?: LearningEventType.GATT_FAILED,
         occurredAt = occurredAt,
         detail = detail
     )
