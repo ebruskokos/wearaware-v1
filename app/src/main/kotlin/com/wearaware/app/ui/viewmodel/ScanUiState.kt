@@ -26,6 +26,13 @@ data class ScanUiState(
     val rankedCandidates: List<RankedCandidate> = emptyList(),
     /** Device ID of the primary lock target, or null if no lock is active. */
     val primaryLockDeviceId: String? = null,
+    /** True while an adaptive refinement is in progress (I/O save). */
+    val isRefiningSignature: Boolean = false,
+    /**
+     * Most recent adaptive refinement delta description.
+     * Set after each successful refinement; cleared on scan stop.
+     */
+    val lastRefinementDelta: String? = null,
 ) {
     val bestMatch: Pair<ObservedDevice, TargetMatchResult>?
         get() {

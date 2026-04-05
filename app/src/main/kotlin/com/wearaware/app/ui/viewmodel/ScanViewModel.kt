@@ -17,6 +17,7 @@ import com.wearaware.app.domain.repository.BleRepository
 import com.wearaware.app.domain.repository.KnownTargetRepository
 import com.wearaware.app.domain.repository.LearningSessionRepository
 import com.wearaware.app.domain.usecase.*
+import com.wearaware.app.domain.usecase.AdaptiveSignatureRefineUseCase
 import com.wearaware.app.domain.usecase.ApplyTemporalMatchFilterUseCase
 import com.wearaware.app.domain.usecase.ComputeRankedCandidatesUseCase
 import com.wearaware.app.domain.usecase.MatchKnownTargetSignatureUseCase
@@ -43,6 +44,7 @@ class ScanViewModel @Inject constructor(
     private val learningSessionRepository: LearningSessionRepository,
     private val applyTemporalFilter: ApplyTemporalMatchFilterUseCase,
     private val computeRankedCandidates: ComputeRankedCandidatesUseCase,
+    private val adaptiveRefine: AdaptiveSignatureRefineUseCase,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -58,6 +60,14 @@ class ScanViewModel @Inject constructor(
     private var prevRankOrder: List<String> = emptyList()
     /** Currently locked primary target device ID. */
     private var primaryLockId: String? = null
+    /** Epoch ms of last adaptive refinement save — throttle to once per ADAPTIVE_INTERVAL_MS. */
+    private var lastAdaptiveRefineAt: Long = 0L
+
+    companion object {
+        private const val TAG = "WearAware.ScanVM"
+        /** Minimum interval between adaptive signature refinements. */
+        private const val ADAPTIVE_INTERVAL_MS = 30_000L
+    }
 
     init {
         _uiState.update {
@@ -97,6 +107,7 @@ class ScanViewModel @Inject constructor(
         deviceLifecycles.clear()
         prevRankOrder = emptyList()
         primaryLockId = null
+        lastAdaptiveRefineAt = 0L
         _uiState.update {
             it.copy(
                 scanState = ScanState.STOPPED,
@@ -105,7 +116,9 @@ class ScanViewModel @Inject constructor(
                 deviceMatchScores = emptyMap(),
                 learnedMatchResults = emptyMap(),
                 rankedCandidates = emptyList(),
-                primaryLockDeviceId = null
+                primaryLockDeviceId = null,
+                isRefiningSignature = false,
+                lastRefinementDelta = null
             )
         }
     }
@@ -251,6 +264,40 @@ class ScanViewModel @Inject constructor(
                 primaryLockDeviceId = newLockId
             )
         }
+
+        // Adaptive refinement — only when a primary lock is established
+        newLockId?.let { lockedId -> maybeAdaptiveRefine(lockedId, devices) }
+    }
+
+    private fun maybeAdaptiveRefine(lockedId: String, devices: List<ObservedDevice>) {
+        val sig = _uiState.value.knownTargetSignature ?: return
+        val device = devices.find { it.id == lockedId } ?: return
+        val temporalState = deviceTemporalStates[lockedId] ?: return
+
+        val now = System.currentTimeMillis()
+        if (now - lastAdaptiveRefineAt < ADAPTIVE_INTERVAL_MS) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefiningSignature = true) }
+            val result = withContext(Dispatchers.IO) {
+                adaptiveRefine(sig, device, temporalState)
+            }
+            if (result.wasRefined && result.signature != null) {
+                knownTargetRepository.save(result.signature)
+                lastAdaptiveRefineAt = System.currentTimeMillis()
+                Log.d(TAG, "Adaptive refinement saved: ${result.deltaDescription}")
+                _uiState.update {
+                    it.copy(
+                        knownTargetSignature = result.signature,
+                        isRefiningSignature = false,
+                        lastRefinementDelta = result.deltaDescription
+                    )
+                }
+            } else {
+                Log.d(TAG, "Adaptive refinement skipped: ${result.skippedReason}")
+                _uiState.update { it.copy(isRefiningSignature = false) }
+            }
+        }
     }
 
     private fun updateLifecycles(
@@ -322,7 +369,4 @@ class ScanViewModel @Inject constructor(
         bleRepository.stopScanning()
     }
 
-    companion object {
-        private const val TAG = "WearAware.ScanVM"
-    }
 }

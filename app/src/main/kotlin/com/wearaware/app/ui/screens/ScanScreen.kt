@@ -156,6 +156,31 @@ fun ScanScreen(
                 )
             }
 
+            // Adaptive refinement indicator
+            if (uiState.isRefiningSignature) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                    Text(
+                        text = "Refining signature...",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else if (uiState.lastRefinementDelta != null && uiState.scanState == ScanState.SCANNING) {
+                Text(
+                    text = "Signature updated: ${uiState.lastRefinementDelta}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                )
+            }
+
             // Filter chips (while scanning)
             if (uiState.scanState == ScanState.SCANNING) {
                 Row(
