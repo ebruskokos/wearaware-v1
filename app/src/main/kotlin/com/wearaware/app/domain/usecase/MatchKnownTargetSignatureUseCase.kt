@@ -22,7 +22,7 @@ import javax.inject.Inject
  *   -4 if averageRssi < -80 dBm
  *   -3 if seenCount < 5
  *
- * THRESHOLDS: STRONG >= 12 | POSSIBLE >= 6 | WEAK >= 3 | NONE < 3
+ * THRESHOLDS: STRONG >= 8 | POSSIBLE >= 4 | WEAK >= 2 | NONE < 2
  * labelOverrideActive = true for STRONG and POSSIBLE
  */
 class MatchKnownTargetSignatureUseCase @Inject constructor() {
@@ -114,9 +114,9 @@ class MatchKnownTargetSignatureUseCase @Inject constructor() {
         }
 
         val confidence = when {
-            score >= 12 -> KnownMatchConfidence.STRONG
-            score >= 6  -> KnownMatchConfidence.POSSIBLE
-            score >= 3  -> KnownMatchConfidence.WEAK
+            score >= 8  -> KnownMatchConfidence.STRONG
+            score >= 4  -> KnownMatchConfidence.POSSIBLE
+            score >= 2  -> KnownMatchConfidence.WEAK
             else        -> KnownMatchConfidence.NONE
         }
 

@@ -37,8 +37,6 @@ class ScanViewModel @Inject constructor(
 
     private val lastAlertedAt = mutableMapOf<String, Long>()
     private val loggedDeviceIds = mutableSetOf<String>()
-    /** Tracks devices whose STRONG/POSSIBLE match has already been logged this session. */
-    private val loggedLearnedMatchIds = mutableSetOf<String>()
 
     init {
         _uiState.update {
@@ -74,7 +72,6 @@ class ScanViewModel @Inject constructor(
         bleRepository.stopScanning()
         lastAlertedAt.clear()
         loggedDeviceIds.clear()
-        loggedLearnedMatchIds.clear()
         _uiState.update {
             it.copy(
                 scanState = ScanState.STOPPED,
@@ -125,7 +122,10 @@ class ScanViewModel @Inject constructor(
         devices: List<ObservedDevice>,
         sig: com.wearaware.app.domain.model.KnownTargetSignature?
     ): Map<String, KnownTargetMatchResult> {
-        if (sig == null) return emptyMap()
+        if (sig == null) {
+            Log.d(TAG, "No learned signature — skipping match")
+            return emptyMap()
+        }
         return devices.associate { device ->
             val input = KnownTargetMatchInput(
                 fingerprintId = device.id,
@@ -141,13 +141,11 @@ class ScanViewModel @Inject constructor(
                 connectable = device.rawBleData?.isConnectable ?: false
             )
             val result = matchKnownTarget(input, sig)
-            if (result.confidence == KnownMatchConfidence.STRONG || result.confidence == KnownMatchConfidence.POSSIBLE) {
-                if (device.id !in loggedLearnedMatchIds) {
-                    loggedLearnedMatchIds.add(device.id)
-                    Log.d(TAG, "Learned match: ${result.confidence.name} for device ${device.id} " +
-                        "(score=${result.score}, labelOverride=${result.labelOverrideActive}, " +
-                        "label='${if (result.labelOverrideActive) sig.displayName else device.advertisedName ?: "raw"}')")
-                }
+            Log.d(TAG, "Device: ${device.id}, Match: ${result.confidence.name}, Score: ${result.score}")
+            when (result.confidence) {
+                KnownMatchConfidence.STRONG -> Log.d(TAG, "OVERRIDE → ${sig.displayName} (device ${device.id})")
+                KnownMatchConfidence.POSSIBLE -> Log.d(TAG, "OVERRIDE → Possible match (device ${device.id})")
+                else -> Unit
             }
             device.id to result
         }
