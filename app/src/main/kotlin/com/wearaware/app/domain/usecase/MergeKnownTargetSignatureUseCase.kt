@@ -39,6 +39,11 @@ class MergeKnownTargetSignatureUseCase @Inject constructor(
         val topPrefixes = topPrefixesByFrequency(updatedFrequency)
         val now = System.currentTimeMillis()
 
+        val mergedProfile = mergedBehaviorProfile(existing, newDevice)
+        // Append this session's avg RSSI to the rolling history (max 10 entries)
+        val updatedSessionRssi = (existing.behaviorProfile?.sessionRssiAverages ?: emptyList())
+            .takeLast(9) + newDevice.averageRssi
+
         val merged = existing.copy(
             lastUpdatedAt = now,
             savedAt = now,
@@ -46,16 +51,19 @@ class MergeKnownTargetSignatureUseCase @Inject constructor(
             manufacturerDataPrefixes = topPrefixes,
             manufacturerDataPrefixFrequency = updatedFrequency,
             serviceUuids = (existing.serviceUuids + newDevice.serviceUuids).distinct(),
-            behaviorProfile = mergedBehaviorProfile(existing, newDevice),
-            learnCount = existing.learnCount + 1
+            behaviorProfile = mergedProfile.copy(sessionRssiAverages = updatedSessionRssi),
+            learnCount = existing.learnCount + 1,
+            observationCount = existing.observationCount + 1,
+            version = existing.version.coerceAtLeast(1) + 1
         )
 
+        val delta = "Learn #${merged.learnCount} — avgRSSI=${mergedProfile.typicalRssiAtClose} dBm"
         Log.d(TAG, "Signature merged: learnCount=${merged.learnCount} " +
             "prefixes=${merged.manufacturerDataPrefixes} " +
             "avgRssi=${merged.behaviorProfile?.typicalRssiAtClose} " +
             "mfIds=${merged.manufacturerIds.map { "0x${it.toString(16).uppercase()}" }}")
 
-        repository.save(merged)
+        repository.saveWithHistory(merged, delta)
         return merged
     }
 

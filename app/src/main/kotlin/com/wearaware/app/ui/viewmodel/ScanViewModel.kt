@@ -62,11 +62,23 @@ class ScanViewModel @Inject constructor(
     private var primaryLockId: String? = null
     /** Epoch ms of last adaptive refinement save — throttle to once per ADAPTIVE_INTERVAL_MS. */
     private var lastAdaptiveRefineAt: Long = 0L
+    /**
+     * False-positive guard: counts per-device ticks where score >= POSSIBLE threshold but the
+     * device is NOT the primary lock. Devices reaching [NON_TARGET_THRESHOLD] ticks are marked
+     * as "persistent non-targets" and receive a [NON_TARGET_PENALTY] score penalty each tick.
+     */
+    private val nonTargetTickCounts = mutableMapOf<String, Int>()
 
     companion object {
         private const val TAG = "WearAware.ScanVM"
         /** Minimum interval between adaptive signature refinements. */
         private const val ADAPTIVE_INTERVAL_MS = 30_000L
+        /** Ticks a high-scoring non-lock device must accumulate before being penalised. */
+        private const val NON_TARGET_THRESHOLD = 20
+        /** Score penalty applied per [NON_TARGET_PENALTY_INTERVAL] ticks beyond [NON_TARGET_THRESHOLD]. */
+        private const val NON_TARGET_PENALTY = 1
+        /** Apply one additional penalty point per this many ticks over threshold (max total -3). */
+        private const val NON_TARGET_PENALTY_INTERVAL = 10
     }
 
     init {
@@ -108,6 +120,7 @@ class ScanViewModel @Inject constructor(
         prevRankOrder = emptyList()
         primaryLockId = null
         lastAdaptiveRefineAt = 0L
+        nonTargetTickCounts.clear()
         _uiState.update {
             it.copy(
                 scanState = ScanState.STOPPED,
@@ -118,7 +131,8 @@ class ScanViewModel @Inject constructor(
                 rankedCandidates = emptyList(),
                 primaryLockDeviceId = null,
                 isRefiningSignature = false,
-                lastRefinementDelta = null
+                lastRefinementDelta = null,
+                persistentNonTargetIds = emptySet()
             )
         }
     }
@@ -236,9 +250,15 @@ class ScanViewModel @Inject constructor(
             else -> currentAlert
         }
 
-        val learnedMatches = computeKnownTargetMatches(devices, _uiState.value.knownTargetSignature)
+        // 4. Compute known-target matches then apply false-positive penalty
+        val rawLearnedMatches = computeKnownTargetMatches(devices, _uiState.value.knownTargetSignature)
+        updateNonTargetCounts(rawLearnedMatches)
+        val persistentNonTargetIds = nonTargetTickCounts
+            .filter { (_, count) -> count >= NON_TARGET_THRESHOLD }
+            .keys.toSet()
+        val learnedMatches = applyNonTargetPenalties(rawLearnedMatches, persistentNonTargetIds)
 
-        // Update lifecycle data and compute ranked candidates
+        // 5. Update lifecycle data and compute ranked candidates
         val now = System.currentTimeMillis()
         updateLifecycles(devices, learnedMatches, now)
         val (ranked, newLockId) = if (_uiState.value.knownTargetSignature != null) {
@@ -261,12 +281,49 @@ class ScanViewModel @Inject constructor(
                 deviceMatchScores = matchScores,
                 learnedMatchResults = learnedMatches,
                 rankedCandidates = ranked,
-                primaryLockDeviceId = newLockId
+                primaryLockDeviceId = newLockId,
+                persistentNonTargetIds = persistentNonTargetIds
             )
         }
 
-        // Adaptive refinement — only when a primary lock is established
+        // 6. Adaptive refinement — only when a primary lock is established
         newLockId?.let { lockedId -> maybeAdaptiveRefine(lockedId, devices) }
+    }
+
+    /**
+     * Increments non-target tick counter for devices scoring >= POSSIBLE that are not the lock.
+     * Resets counter when a device becomes the primary lock.
+     */
+    private fun updateNonTargetCounts(matches: Map<String, KnownTargetMatchResult>) {
+        matches.forEach { (id, result) ->
+            when {
+                id == primaryLockId -> nonTargetTickCounts.remove(id)
+                result.confidence == KnownMatchConfidence.POSSIBLE ||
+                    result.confidence == KnownMatchConfidence.STRONG -> {
+                    nonTargetTickCounts[id] = (nonTargetTickCounts[id] ?: 0) + 1
+                }
+                else -> Unit // below threshold — don't track
+            }
+        }
+    }
+
+    /**
+     * Applies a graduated penalty to persistent non-target devices.
+     * Penalty = 1 per [NON_TARGET_PENALTY_INTERVAL] ticks over [NON_TARGET_THRESHOLD], capped at 3.
+     */
+    private fun applyNonTargetPenalties(
+        matches: Map<String, KnownTargetMatchResult>,
+        nonTargetIds: Set<String>
+    ): Map<String, KnownTargetMatchResult> {
+        if (nonTargetIds.isEmpty()) return matches
+        return matches.mapValues { (id, result) ->
+            if (id !in nonTargetIds || result.score <= 0) return@mapValues result
+            val ticks = nonTargetTickCounts[id] ?: 0
+            val extra = ((ticks - NON_TARGET_THRESHOLD) / NON_TARGET_PENALTY_INTERVAL)
+                .coerceIn(0, 2)  // 0–2 extra points → total penalty 1–3
+            val penalty = NON_TARGET_PENALTY + extra
+            result.copy(score = (result.score - penalty).coerceAtLeast(0))
+        }
     }
 
     private fun maybeAdaptiveRefine(lockedId: String, devices: List<ObservedDevice>) {
@@ -283,14 +340,15 @@ class ScanViewModel @Inject constructor(
                 adaptiveRefine(sig, device, temporalState)
             }
             if (result.wasRefined && result.signature != null) {
-                knownTargetRepository.save(result.signature)
+                val delta = result.deltaDescription ?: ""
+                knownTargetRepository.saveWithHistory(result.signature, delta)
                 lastAdaptiveRefineAt = System.currentTimeMillis()
-                Log.d(TAG, "Adaptive refinement saved: ${result.deltaDescription}")
+                Log.d(TAG, "Adaptive refinement saved: $delta")
                 _uiState.update {
                     it.copy(
                         knownTargetSignature = result.signature,
                         isRefiningSignature = false,
-                        lastRefinementDelta = result.deltaDescription
+                        lastRefinementDelta = delta
                     )
                 }
             } else {
@@ -315,12 +373,23 @@ class ScanViewModel @Inject constructor(
                 isStrong -> nowMs
                 else -> null
             }
+            // Track high-score-without-lock for false positive guard
+            val isPossibleOrStrong = result.confidence == KnownMatchConfidence.POSSIBLE ||
+                result.confidence == KnownMatchConfidence.STRONG
+            val isLocked = id == primaryLockId
+            val prevHighScore = existing?.highScoreWithoutLockCount ?: 0
+            val newHighScore = when {
+                isLocked -> 0  // reset when locked
+                isPossibleOrStrong -> prevHighScore + 1
+                else -> prevHighScore
+            }
             deviceLifecycles[id] = CandidateLifecycle(
                 discoveredAt = existing?.discoveredAt ?: nowMs,
                 lastSeenAt = device.lastSeenAt,
                 peakScore = maxOf(existing?.peakScore ?: 0, result.score),
                 totalSeenCount = (existing?.totalSeenCount ?: 0) + 1,
-                strongSince = strongSince
+                strongSince = strongSince,
+                highScoreWithoutLockCount = newHighScore
             )
         }
     }
@@ -342,21 +411,47 @@ class ScanViewModel @Inject constructor(
     }
 
     /**
-     * Serialises the learned signature + latest session events to a pretty-printed JSON string.
+     * Serialises the learned signature, evolution history, latest session events,
+     * match breakdowns, and rejected candidates to a pretty-printed JSON string.
      * Returns null if no signature exists. Caller should dispatch to IO before calling.
      */
     suspend fun buildExportJson(): String? {
         val sig = _uiState.value.knownTargetSignature ?: return null
-        val sessions = learningSessionRepository.getAllSessions()
+        val sessions = withContext(Dispatchers.IO) { learningSessionRepository.getAllSessions() }
         val latestSession = sessions.maxByOrNull { it.startedAt }
         val events = if (latestSession != null)
-            learningSessionRepository.getEventsForSession(latestSession.sessionId)
+            withContext(Dispatchers.IO) { learningSessionRepository.getEventsForSession(latestSession.sessionId) }
         else emptyList()
+        val history = withContext(Dispatchers.IO) { knownTargetRepository.loadHistory() }
+
+        // Collect current match breakdowns for ranked candidates
+        val matchBreakdowns = _uiState.value.learnedMatchResults.mapValues { (_, result) ->
+            mapOf(
+                "score" to result.score,
+                "confidence" to result.confidence.name,
+                "breakdown" to result.scoreBreakdown.map {
+                    mapOf("category" to it.category.name, "points" to it.points, "description" to it.description)
+                },
+                "temporalNotes" to result.temporalNotes
+            )
+        }
+
         val export = mapOf(
             "learnedSignature" to sig,
+            "signatureConfidence" to sig.signatureConfidence.name,
             "sessionCount" to sessions.size,
             "latestSession" to latestSession,
-            "latestSessionEvents" to events
+            "latestSessionEvents" to events,
+            "evolutionHistory" to history.map { snap ->
+                mapOf(
+                    "version" to snap.version,
+                    "savedAt" to snap.savedAt,
+                    "deltaDescription" to snap.deltaDescription
+                )
+            },
+            "matchBreakdowns" to matchBreakdowns,
+            "persistentNonTargetIds" to _uiState.value.persistentNonTargetIds.toList(),
+            "nonTargetTickCounts" to nonTargetTickCounts.filter { (_, c) -> c >= NON_TARGET_THRESHOLD }
         )
         return GsonBuilder().setPrettyPrinting().create().toJson(export)
     }
@@ -368,5 +463,4 @@ class ScanViewModel @Inject constructor(
         super.onCleared()
         bleRepository.stopScanning()
     }
-
 }

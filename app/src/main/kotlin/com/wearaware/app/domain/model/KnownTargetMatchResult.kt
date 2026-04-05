@@ -19,5 +19,11 @@ data class KnownTargetMatchResult(
      * Human-readable notes from the temporal filter (decay, smoothing, hysteresis).
      * Empty when temporal filter has not yet been applied.
      */
-    val temporalNotes: List<String> = emptyList()
+    val temporalNotes: List<String> = emptyList(),
+    /**
+     * Weighted score breakdown by category — populated by [MatchKnownTargetSignatureUseCase].
+     * Each item carries a [ScoreBreakdownItem.points] value (positive = bonus, negative = penalty).
+     * Empty on results produced before this field was added.
+     */
+    val scoreBreakdown: List<ScoreBreakdownItem> = emptyList()
 )

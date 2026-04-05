@@ -33,6 +33,12 @@ data class ScanUiState(
      * Set after each successful refinement; cleared on scan stop.
      */
     val lastRefinementDelta: String? = null,
+    /**
+     * Device IDs that have scored >= POSSIBLE for [ScanViewModel.NON_TARGET_THRESHOLD] ticks
+     * without ever becoming the primary lock. Receive a graduated score penalty.
+     * In-memory only — cleared on scan stop.
+     */
+    val persistentNonTargetIds: Set<String> = emptySet(),
 ) {
     val bestMatch: Pair<ObservedDevice, TargetMatchResult>?
         get() {

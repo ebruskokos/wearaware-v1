@@ -18,6 +18,8 @@ import com.wearaware.app.domain.model.DeviceCategory
 import com.wearaware.app.domain.model.KnownMatchConfidence
 import com.wearaware.app.domain.model.MatchConfidence
 import com.wearaware.app.domain.model.ObservedDevice
+import com.wearaware.app.domain.model.ScoreCategory
+import com.wearaware.app.domain.model.SignatureConfidence
 import com.wearaware.app.ui.components.SafeWording
 import com.wearaware.app.ui.components.SignalBars
 import com.wearaware.app.ui.components.VisibilityBadge
@@ -227,32 +229,71 @@ fun DeviceDetailScreen(
                     KnownMatchConfidence.WEAK -> MaterialTheme.colorScheme.tertiary
                     KnownMatchConfidence.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
                 }
-                val confidenceLabel = when (learnedMatchResult.confidence) {
-                    KnownMatchConfidence.STRONG -> "Strong match — \"${learnedMatchResult.signature.displayName}\""
-                    KnownMatchConfidence.POSSIBLE -> "Possible match to your glasses"
-                    KnownMatchConfidence.WEAK -> "Weak match (limited signals)"
-                    KnownMatchConfidence.NONE -> "No match to learned profile"
+                val isNonTarget = deviceId in uiState.persistentNonTargetIds
+                val confidenceLabel = when {
+                    isNonTarget -> "Persistent non-target (high score, never locked)"
+                    learnedMatchResult.confidence == KnownMatchConfidence.STRONG ->
+                        "Strong match — \"${learnedMatchResult.signature.displayName}\""
+                    learnedMatchResult.confidence == KnownMatchConfidence.POSSIBLE ->
+                        "Possible match to your glasses"
+                    learnedMatchResult.confidence == KnownMatchConfidence.WEAK ->
+                        "Weak match (limited signals)"
+                    else -> "No match to learned profile"
                 }
                 Text(
                     text = confidenceLabel,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = confidenceColor
+                    color = if (isNonTarget) MaterialTheme.colorScheme.error else confidenceColor
                 )
                 Text(
                     text = "Score: ${learnedMatchResult.score}  •  Label override: ${if (learnedMatchResult.labelOverrideActive) "active" else "off"}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (learnedMatchResult.matchedSignals.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Why it matched:", style = MaterialTheme.typography.labelSmall)
-                    learnedMatchResult.matchedSignals.forEach { signal ->
-                        Text(
-                            text = "  • $signal",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                // Structured score breakdown
+                if (learnedMatchResult.scoreBreakdown.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Score breakdown:", style = MaterialTheme.typography.labelSmall)
+                    learnedMatchResult.scoreBreakdown
+                        .sortedByDescending { kotlin.math.abs(it.points) }
+                        .forEach { item ->
+                            val sign = if (item.points >= 0) "+" else ""
+                            val color = when {
+                                item.points >= 4 -> MaterialTheme.colorScheme.primary
+                                item.points > 0 -> MaterialTheme.colorScheme.secondary
+                                else -> MaterialTheme.colorScheme.error
+                            }
+                            val categoryLabel = when (item.category) {
+                                ScoreCategory.MANUFACTURER_ID -> "Manufacturer ID"
+                                ScoreCategory.PREFIX_MATCH -> "Data prefix"
+                                ScoreCategory.SERVICE_UUID -> "Service UUID"
+                                ScoreCategory.GATT_UUID -> "GATT UUID"
+                                ScoreCategory.FINGERPRINT_ID -> "Fingerprint ID"
+                                ScoreCategory.PROXIMITY -> "Proximity"
+                                ScoreCategory.PERSISTENCE -> "Persistence"
+                                ScoreCategory.CONNECTABLE -> "Connectable"
+                                ScoreCategory.VISIBLE_AT_STOP -> "Visible at stop"
+                                ScoreCategory.APPLE_PENALTY -> "Apple penalty"
+                                ScoreCategory.WEAK_SIGNAL -> "Weak signal"
+                                ScoreCategory.LOW_PERSISTENCE -> "Low persistence"
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "  $categoryLabel: ${item.description}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = "$sign${item.points}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = color
+                                )
+                            }
+                        }
                 }
                 if (learnedMatchResult.temporalNotes.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
@@ -398,6 +439,13 @@ fun DeviceDetailScreen(
                         modifier = Modifier.weight(1f)
                     ) { Text("Export", style = MaterialTheme.typography.labelSmall) }
                 }
+            }
+
+            // --- Training Health ---
+            val healthSig = uiState.knownTargetSignature
+            if (healthSig != null) {
+                HorizontalDivider()
+                TrainingHealthSection(sig = healthSig)
             }
 
             // --- Debug View (shown when debug mode is on) ---
@@ -555,6 +603,113 @@ fun DeviceDetailScreen(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+@Composable
+private fun TrainingHealthSection(
+    sig: com.wearaware.app.domain.model.KnownTargetSignature
+) {
+    val profile = sig.behaviorProfile
+    val fmt = java.text.SimpleDateFormat("MMM d, yyyy HH:mm", java.util.Locale.getDefault())
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Training Health", style = MaterialTheme.typography.titleSmall)
+
+        // Confidence badge
+        val (confLabel, confColor) = when (sig.signatureConfidence) {
+            SignatureConfidence.HIGH -> "HIGH confidence" to MaterialTheme.colorScheme.primary
+            SignatureConfidence.MEDIUM -> "MEDIUM confidence" to MaterialTheme.colorScheme.secondary
+            SignatureConfidence.LOW -> "LOW confidence — needs more training" to MaterialTheme.colorScheme.error
+        }
+        Text(
+            text = confLabel,
+            style = MaterialTheme.typography.bodyMedium,
+            color = confColor
+        )
+
+        // Observation count + last updated
+        Text(
+            text = "Observations: ${sig.observationCount}  •  Version: v${sig.version}",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Text(
+            text = "Last updated: ${fmt.format(sig.lastUpdatedAt)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (profile != null) {
+            // RSSI range (variance proxy): smaller range = more stable
+            val rssiMin = profile.rssiMin
+            val rssiMax = profile.rssiMax
+            if (rssiMin != null && rssiMax != null && rssiMax > rssiMin) {
+                val range = rssiMax - rssiMin
+                val stabilityLabel = when {
+                    range <= 10 -> "Stable (±${range / 2} dBm)"
+                    range <= 20 -> "Moderate variance (${range} dBm range)"
+                    else -> "High variance (${range} dBm range)"
+                }
+                val stabilityColor = when {
+                    range <= 10 -> MaterialTheme.colorScheme.primary
+                    range <= 20 -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.tertiary
+                }
+                Text(
+                    text = "Signal variance: $stabilityLabel",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = stabilityColor
+                )
+                // Stability bar: 0 = full range, 1 = no variance
+                val stabilityProgress = (1f - (range.coerceIn(0, 40).toFloat() / 40f))
+                LinearProgressIndicator(
+                    progress = { stabilityProgress },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    color = stabilityColor
+                )
+            }
+
+            // Sample depth
+            val sampleDepth = profile.rssiSampleCount.coerceAtLeast(1)
+            Text(
+                text = "RSSI samples: $sampleDepth  •  Avg: ${profile.typicalRssiAtClose} dBm",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Stability score: observations / 30, capped at 100%
+            val stabilityScore = (sig.observationCount.coerceAtMost(30) * 100) / 30
+            Text(
+                text = "Stability score: $stabilityScore%",
+                style = MaterialTheme.typography.bodySmall
+            )
+            LinearProgressIndicator(
+                progress = { stabilityScore / 100f },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                color = when {
+                    stabilityScore >= 80 -> MaterialTheme.colorScheme.primary
+                    stabilityScore >= 40 -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.tertiary
+                }
+            )
+
+            // Cross-session RSSI trend
+            if (profile.sessionRssiAverages.size >= 2) {
+                val oldest = profile.sessionRssiAverages.first()
+                val newest = profile.sessionRssiAverages.last()
+                val trend = newest - oldest
+                val trendLabel = when {
+                    trend >= 5 -> "↑ Getting closer over sessions (+${trend} dBm avg)"
+                    trend <= -5 -> "↓ Getting farther over sessions (${trend} dBm avg)"
+                    else -> "≈ Stable across ${profile.sessionRssiAverages.size} sessions"
+                }
+                Text(
+                    text = trendLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

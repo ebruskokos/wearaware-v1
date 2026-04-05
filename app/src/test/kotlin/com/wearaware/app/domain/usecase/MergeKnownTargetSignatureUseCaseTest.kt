@@ -316,9 +316,9 @@ class MergeKnownTargetSignatureUseCaseTest {
     // --- Repository persistence ---
 
     @Test
-    fun `merged signature is saved to repository`() {
+    fun `merged signature is saved to repository with history`() {
         val sig = makeSignature()
         useCase(sig, makeDevice())
-        verify(exactly = 1) { repository.save(any()) }
+        verify(exactly = 1) { repository.saveWithHistory(any(), any()) }
     }
 }

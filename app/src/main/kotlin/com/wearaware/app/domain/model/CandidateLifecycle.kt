@@ -17,5 +17,12 @@ data class CandidateLifecycle(
      * Epoch ms when this device first reached KnownMatchConfidence.STRONG.
      * Reset to null whenever confidence drops below STRONG.
      */
-    val strongSince: Long? = null
+    val strongSince: Long? = null,
+    /**
+     * Number of scan ticks in which this device scored >= POSSIBLE threshold
+     * but was NOT the primary lock target.
+     * Used by the false-positive guard: devices that consistently score high but
+     * never lock are marked as "persistent non-target" and receive a score penalty.
+     */
+    val highScoreWithoutLockCount: Int = 0
 )
