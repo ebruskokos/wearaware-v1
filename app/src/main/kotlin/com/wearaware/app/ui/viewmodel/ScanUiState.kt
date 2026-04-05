@@ -1,5 +1,7 @@
 package com.wearaware.app.ui.viewmodel
 
+import com.wearaware.app.domain.model.LearnedDeviceSignature
+import com.wearaware.app.domain.model.LearnedMatchResult
 import com.wearaware.app.domain.model.MatchConfidence
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.PersistenceAlert
@@ -16,7 +18,10 @@ data class ScanUiState(
     val focusMode: Boolean = false,
     val debugMode: Boolean = false,
     val deviceMatchScores: Map<String, TargetMatchResult> = emptyMap(),
-    val activeFilter: ScanFilter = ScanFilter.ALL
+    val activeFilter: ScanFilter = ScanFilter.ALL,
+    val learnedSignature: LearnedDeviceSignature? = null,
+    /** Keyed by ObservedDevice.id. Updated on every device list tick. */
+    val learnedMatchResults: Map<String, LearnedMatchResult> = emptyMap(),
 ) {
     /**
      * Best-scoring candidate device paired with its match result, or null.

@@ -2,6 +2,8 @@ package com.wearaware.app.ui.viewmodel
 
 import com.wearaware.app.domain.model.CaptureSession
 import com.wearaware.app.domain.model.CompareMatchResult
+import com.wearaware.app.domain.model.LearnedDeviceSignature
+import com.wearaware.app.domain.model.LearnedMatchResult
 
 data class CaptureUiState(
     val baselineCaptureState: CaptureState = CaptureState.IDLE,
@@ -16,7 +18,12 @@ data class CaptureUiState(
     /** True if BLE scanning is currently active. */
     val isBleScanningActive: Boolean = false,
     /** True if Bluetooth is enabled and available on the device. */
-    val isBleAvailable: Boolean = true
+    val isBleAvailable: Boolean = true,
+    val learnedSignature: LearnedDeviceSignature? = null,
+    /** Keyed by fingerprintId. Populated after compare + learned matching runs. */
+    val learnedMatchResults: Map<String, LearnedMatchResult> = emptyMap(),
+    /** Set by learnDevice(), shown as a snackbar, auto-cleared after 3s. */
+    val learnSaveConfirmation: String? = null,
 )
 
 enum class CaptureState { IDLE, CAPTURING, DONE }
