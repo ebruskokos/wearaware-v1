@@ -17,6 +17,8 @@ A compare engine diffs the two captures and ranks candidates by score and confid
 
 Exactly one baseline and one target capture are stored at a time. Starting a new capture of either type replaces the previous one.
 
+**Only one capture may be active at a time.** Baseline and target captures cannot overlap — if the user attempts to start one while the other is already running, the UI shows a clear message ("Stop the active capture before starting a new one") and takes no action.
+
 ---
 
 ## 2. Architecture
@@ -227,7 +229,16 @@ operator fun invoke(
 ): List<CompareMatchResult>
 ```
 
-Returns results sorted descending by score. Devices scoring < 3 (`NONE`) are excluded.
+Returns results sorted using a deterministic comparator:
+1. Score descending (primary)
+2. Exact target name match present — first among ties
+3. Meta manufacturer match present — `manufacturerIds` contains `0x0075`
+4. `targetAverageRssi` descending
+5. `fingerprintId` ascending (final stable tie-break)
+
+Devices scoring < 3 (`NONE`) are excluded.
+
+**Top-candidate eligibility:** Only the single highest-scoring result with confidence `MEDIUM` or `HIGH` may be flagged as top candidate. `LOW` confidence results appear in the list but receive no "★ Most likely" label.
 
 ### Scoring table
 
@@ -239,7 +250,7 @@ For each device in `target.devices`, look up the same `fingerprintId` in `baseli
 | Only in target — no identity signal | +3 | `baselineDevice == null` AND none of the above (caps at LOW alone) |
 | Strong RSSI increase | +4 | `baselineDevice != null` AND `target.averageRssi − baseline.averageRssi >= 10` dBm |
 | Exact target name match | +4 | `advertisedName` equals `profile.friendlyName` (case-insensitive) |
-| Meta manufacturer | +3 | `manufacturerIds` contains `0x0075` |
+| Meta manufacturer | +3 | `manufacturerIds` contains `0x0075` — **canonical field for logic; `companyNames` is display-only** |
 | `SMART_GLASSES` classification | +3 | `category == DeviceCategory.SMART_GLASSES` |
 | `CAMERA_CAPABLE_WEARABLE` classification | +2 | `category == DeviceCategory.CAMERA_CAPABLE_WEARABLE` |
 | Partial profile hint match | +2 | `advertisedName` contains `profile.modelHint` or `profile.brandHint` (case-insensitive) |
@@ -388,10 +399,14 @@ Service UUIDs: 0000fe2c-...
 [ View Full Device Details ]   (only shown if device still in live scan)
 ```
 
-**Top candidate** (highest score, confidence >= MEDIUM):
+**Top candidate** (highest score, confidence `MEDIUM` or `HIGH` only — `LOW` confidence results are never highlighted):
 ```
 ★ "Most likely new candidate after target device was powered on"
 ```
+
+### Capture lifecycle enforcement
+
+Only one capture may be active at a time. The "Start Baseline" button is disabled while a target capture is running, and vice versa. If the user attempts to tap a disabled start button, display: "Stop the active capture before starting a new one." Both start buttons are enabled when no capture is running.
 
 ### Safe wording rules
 - Never say "this is your device." Always say "most likely candidate" or "new candidate."
