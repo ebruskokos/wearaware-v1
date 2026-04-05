@@ -16,6 +16,7 @@ import com.wearaware.app.domain.model.CapturedDevice
 import com.wearaware.app.domain.model.CompareConfidence
 import com.wearaware.app.domain.model.CompareMatchResult
 import com.wearaware.app.domain.model.DeviceCategory
+import com.wearaware.app.domain.model.LearnedConfidence
 import com.wearaware.app.ui.viewmodel.CaptureViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -81,6 +82,20 @@ fun CapturedDeviceDetailScreen(
             device.macAddress?.let {
                 Text("MAC: $it", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            // Learn this device button
+            val learnedSignature = uiState.learnedSignature
+            val alreadySaved = learnedSignature?.fingerprintId == device.fingerprintId
+            Button(
+                onClick = { viewModel.learnDevice(device.fingerprintId) },
+                enabled = !alreadySaved,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (alreadySaved) "Already saved as learned device"
+                    else "Learn this device — This is my glasses"
+                )
             }
 
             HorizontalDivider()
@@ -187,6 +202,62 @@ fun CapturedDeviceDetailScreen(
                         Text(
                             "  • $signal",
                             style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Learned signature match debug section
+            HorizontalDivider()
+            Text("Learned Signature Match", style = MaterialTheme.typography.titleSmall)
+            val learnedSignatureDebug = uiState.learnedSignature
+            if (learnedSignatureDebug == null) {
+                Text(
+                    "No learned signature saved",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    "Learned signature: ${learnedSignatureDebug.displayName}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                val learnedMatch = uiState.learnedMatchResults[fingerprintId]
+                if (learnedMatch == null) {
+                    Text(
+                        "Match: not computed (run compare first)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    val confidenceColor = when (learnedMatch.confidence) {
+                        LearnedConfidence.STRONG -> MaterialTheme.colorScheme.primary
+                        LearnedConfidence.POSSIBLE -> MaterialTheme.colorScheme.secondary
+                        LearnedConfidence.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Text(
+                        "Match confidence: ${learnedMatch.confidence.name} (score ${learnedMatch.score})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = confidenceColor
+                    )
+                    Text(
+                        "Label override active: ${if (learnedMatch.labelOverrideActive) "Yes" else "No"}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (learnedMatch.matchedSignals.isNotEmpty()) {
+                        Text("Matched signals:", style = MaterialTheme.typography.labelSmall)
+                        learnedMatch.matchedSignals.forEach { signal ->
+                            Text(
+                                "  • $signal",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        Text(
+                            "No signals matched",
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
