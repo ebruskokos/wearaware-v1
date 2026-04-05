@@ -341,6 +341,32 @@ private fun CompareResultCard(
                 color = confidenceColor
             )
 
+            // Behavioral detection labels — shown when device has no identity signal
+            val hasIdentitySignal = result.comparisonSignals.any { s ->
+                s.startsWith("Meta manufacturer") ||
+                s.startsWith("Classification: SMART_GLASSES") ||
+                s.startsWith("Classification: CAMERA_CAPABLE_WEARABLE") ||
+                s.startsWith("Exact target name") ||
+                s.startsWith("Partial target profile")
+            }
+            val hasProximityPersistenceCombo = result.comparisonSignals.any {
+                it.startsWith("Close proximity + persistence")
+            }
+            if (!hasIdentitySignal) {
+                Text(
+                    "No identity signal — using behavioral detection",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (hasProximityPersistenceCombo) {
+                Text(
+                    "Likely nearby device (strong signal + persistence)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = confidenceColor
+                )
+            }
+
             val displayName = device.advertisedName
                 ?: device.companyNames.firstOrNull()?.let { "$it device" }
                 ?: "Unknown BLE Device"

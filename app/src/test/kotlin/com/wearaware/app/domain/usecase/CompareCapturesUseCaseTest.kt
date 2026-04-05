@@ -294,7 +294,7 @@ class CompareCapturesUseCaseTest {
     @Test
     fun `Apple device in both captures with RSSI delta still scores via delta signal`() {
         // Suppression only blocks the "only in target" ungated bonus.
-        // An Apple device with a meaningful RSSI increase is still reportable.
+        // An Apple device with RSSI -55 earns: +4 (delta ≥ 10) + +4 (very close, -55 ≥ -50) = 8
         val appleTarget = makeDevice("fpA3", manufacturerIds = listOf(0x004C), averageRssi = -55)
         val appleBaseline = makeDevice("fpA3", manufacturerIds = listOf(0x004C), averageRssi = -70)
         val target = makeSession(CaptureType.TARGET, listOf(appleTarget))
@@ -302,14 +302,17 @@ class CompareCapturesUseCaseTest {
         val results = useCase(baseline, target, profile)
         val result = results.firstOrNull { it.capturedDevice.fingerprintId == "fpA3" }
         assertNotNull("Apple device with RSSI delta should still appear", result)
-        assertEquals(4, result!!.score)  // +4 RSSI delta only
-        assertEquals(CompareConfidence.LOW, result.confidence)
+        // -55 dBm qualifies for close proximity (≥ -60) but NOT very close (≥ -50)
+        assertEquals(7, result!!.score)  // +4 (RSSI delta) + +3 (close proximity -55 dBm)
+        assertEquals(CompareConfidence.MEDIUM, result.confidence)
+        assertTrue(result.comparisonSignals.any { it.contains("increased") })
+        assertTrue(result.comparisonSignals.any { it.contains("Close proximity") })
     }
 
     // --- visibleAtStop bonus ---
 
     @Test
-    fun `visibleAtStop adds 1 point bonus`() {
+    fun `visibleAtStop adds 2 point bonus`() {
         val deviceVisible = makeDevice("fpV1", manufacturerIds = listOf(0x0075), visibleAtStop = true)
         val deviceGone = makeDevice("fpV2", manufacturerIds = listOf(0x0075), visibleAtStop = false)
         val baseline = makeSession(CaptureType.BASELINE, emptyList())
@@ -317,13 +320,57 @@ class CompareCapturesUseCaseTest {
         val results = useCase(baseline, target, profile)
         val visibleResult = results.first { it.capturedDevice.fingerprintId == "fpV1" }
         val goneResult = results.first { it.capturedDevice.fingerprintId == "fpV2" }
-        // Both: +8 (gated by Meta) + +3 (Meta); visible adds +1
-        assertEquals(12, visibleResult.score)
+        // Both: +8 (gated by Meta) + +3 (Meta); visible adds +2
+        assertEquals(13, visibleResult.score)
         assertEquals(11, goneResult.score)
         assertTrue(
             "visibleAtStop signal should appear in comparisonSignals",
             visibleResult.comparisonSignals.any { it.contains("Still advertising") }
         )
+    }
+
+    // --- Behavioral detection (no identity signal) ---
+
+    @Test
+    fun `unknown device with strong RSSI and high persistence reaches HIGH confidence via behavioral signals`() {
+        // Reproduces the real-world scenario: glasses that do not expose Meta manufacturer ID
+        // or an advertised name, but are persistently nearby with strong signal.
+        val device = makeDevice("fpBeh1", averageRssi = -57, seenCount = 128, visibleAtStop = true)
+        val baseline = makeSession(CaptureType.BASELINE, emptyList())
+        val target = makeSession(CaptureType.TARGET, listOf(device))
+        val results = useCase(baseline, target, profile)
+        val result = results.first()
+        // +3 (only-in-target ungated) + +3 (close RSSI -57 ≥ -60) + +3 (persistence ≥ 100) +
+        // +2 (visibleAtStop) + +3 (combo: RSSI ≥ -60 AND seenCount ≥ 50) = 14
+        assertEquals(14, result.score)
+        assertEquals(CompareConfidence.HIGH, result.confidence)
+        // No identity signal should have fired
+        assertTrue(
+            "No identity signals should appear for an unknown device",
+            result.comparisonSignals.none {
+                it.contains("Meta") || it.contains("SMART_GLASSES") ||
+                it.contains("CAMERA_CAPABLE") || it.contains("target name") || it.contains("profile hint")
+            }
+        )
+        assertTrue(result.comparisonSignals.any { it.contains("appeared during target capture") })
+        assertTrue(result.comparisonSignals.any { it.contains("Close proximity") })
+        assertTrue(result.comparisonSignals.any { it.contains("High persistence") })
+        assertTrue(result.comparisonSignals.any { it.contains("Still advertising") })
+        assertTrue(result.comparisonSignals.any { it.contains("Close proximity + persistence") })
+    }
+
+    @Test
+    fun `unknown device with moderate RSSI and persistence reaches MEDIUM confidence`() {
+        // seenCount 50 → +2 persistence; RSSI -63 < -60 → no proximity bonus; combo doesn't fire
+        val device = makeDevice("fpBeh2", averageRssi = -63, seenCount = 50, visibleAtStop = false)
+        val baseline = makeSession(CaptureType.BASELINE, emptyList())
+        val target = makeSession(CaptureType.TARGET, listOf(device))
+        val results = useCase(baseline, target, profile)
+        val result = results.first()
+        // +3 (only-in-target ungated) + +2 (persistence ≥ 50) = 5 → LOW (just below MEDIUM)
+        // combo doesn't fire (RSSI < -60)
+        assertEquals(5, result.score)
+        assertEquals(CompareConfidence.LOW, result.confidence)
     }
 
     @Test

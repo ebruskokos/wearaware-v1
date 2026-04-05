@@ -6,27 +6,48 @@ import javax.inject.Inject
 private const val META_COMPANY_ID = 0x0075
 private const val APPLE_COMPANY_ID = 0x004C
 private const val RSSI_DELTA_THRESHOLD = 10
+private const val RSSI_CLOSE_THRESHOLD = -60        // close proximity: >= -60 dBm
+private const val RSSI_VERY_CLOSE_THRESHOLD = -50   // very close proximity: >= -50 dBm
+private const val PERSISTENCE_MEDIUM_THRESHOLD = 50  // high persistence tier 1
+private const val PERSISTENCE_HIGH_THRESHOLD = 100   // high persistence tier 2
 
 /**
  * PURPOSE: Compares a baseline and target CaptureSession to rank which devices
  *   most likely appeared because the target device (e.g. Meta glasses) was powered on.
  *
+ * DESIGN RATIONALE: Meta Ray-Ban glasses do not reliably expose manufacturer ID (0x0075)
+ *   or an advertised name in all BLE scan environments. The scorer therefore weights
+ *   behavioral signals (RSSI strength, persistence, proximity+persistence combo) heavily
+ *   enough that an unknown device can reach HIGH confidence without any identity signal.
+ *   Identity signals (Meta ID, name, classification) remain strong boosters but are not
+ *   gating conditions for HIGH confidence.
+ *
  * SCORING (additive):
  *   +8  only in target — gated: requires at least one identity signal
- *   +3  only in target — ungated: no identity signal (caps at LOW alone)
- *         ⚠ Apple-only devices (0x004C, no other identity signal) are suppressed here.
- *         Apple devices are pervasive; their appearance in a target scan is noise,
- *         not evidence. They can still score via RSSI delta if present in both captures.
- *   +4  RSSI increased >= 10 dBm vs baseline
+ *   +3  only in target — ungated: no identity signal (Apple-only devices suppressed)
+ *   +4  very close proximity: averageRssi >= -50 dBm
+ *   +4  RSSI delta >= 10 dBm vs baseline
  *   +4  exact target name match (profile.friendlyName)
+ *   +3  close proximity: averageRssi >= -60 dBm
  *   +3  Meta manufacturer match (manufacturerIds contains 0x0075) — CANONICAL FIELD
  *   +3  SMART_GLASSES classification
+ *   +3  close proximity + persistence combo (RSSI >= -60 AND seenCount >= 50)
+ *   +3  high persistence: seenCount >= 100
  *   +2  CAMERA_CAPABLE_WEARABLE classification
  *   +2  partial profile hint (modelHint or brandHint in advertisedName)
- *   +1  visibleAtStop: device was still advertising when capture was stopped
- *   +1  seenCount >= 5 during target capture
+ *   +2  high persistence: seenCount >= 50
+ *   +2  visibleAtStop: still advertising when capture was stopped
+ *   +1  persistence: seenCount >= 5
  *
  * CONFIDENCE: HIGH >= 9 | MEDIUM >= 6 | LOW >= 3 | NONE < 3 (excluded)
+ *
+ * BEHAVIORAL PATH TO HIGH (no identity signal required):
+ *   An unknown device can reach HIGH via:
+ *   +3 (only-in-target ungated) + +3 (RSSI >= -60) + +3 (seenCount >= 100) +
+ *   +2 (visibleAtStop) + +3 (combo) = 14 → HIGH
+ *
+ *   Minimum behavioral HIGH (seenCount >= 50, RSSI >= -60, visibleAtStop):
+ *   +3 + +3 + +2 + +2 + +3 = 13 → HIGH
  *
  * TOP CANDIDATE: only MEDIUM or HIGH may be highlighted as top candidate in UI.
  *
@@ -34,6 +55,9 @@ private const val RSSI_DELTA_THRESHOLD = 10
  *
  * NOTES: manufacturerIds is canonical for all logic. companyNames is display-only.
  *   When baseline is null, "only in target" signals never fire (hasBaseline = false).
+ *   Apple suppression: Apple-only devices (0x004C, no identity signal) are suppressed
+ *   from the ungated "only in target" bonus — they are pervasive environmental noise.
+ *   They can still score via RSSI delta if present in both captures.
  */
 class CompareCapturesUseCase @Inject constructor() {
 
@@ -88,10 +112,9 @@ class CompareCapturesUseCase @Inject constructor() {
 
         // "Only in target" signals — require hasBaseline to avoid false positives
         if (baselineDevice == null && hasBaseline) {
-            // Apple-only: suppress the ungated bonus. Apple devices (iPhones, AirPods, etc.)
-            // are ubiquitous — their appearance in any target scan is environmental noise,
-            // not evidence of being the target device. They can still score via RSSI delta
-            // if present in both captures (meaningful) but not just by "appearing".
+            // Apple-only: suppress the ungated bonus. Apple devices are pervasive environmental
+            // noise — their appearance in any target scan is not evidence of being the target.
+            // They can still score via RSSI delta if present in both captures.
             val isAppleOnly = device.manufacturerIds.contains(APPLE_COMPANY_ID) && !hasIdentitySignal
             if (hasIdentitySignal) {
                 score += 8
@@ -102,13 +125,24 @@ class CompareCapturesUseCase @Inject constructor() {
             }
         }
 
-        // RSSI delta
+        // RSSI delta vs baseline
         if (baselineDevice != null) {
             val delta = device.averageRssi - baselineDevice.averageRssi
             if (delta >= RSSI_DELTA_THRESHOLD) {
                 score += 4
                 signals += "Signal strength increased by +${delta} dBm in target capture"
             }
+        }
+
+        // Strong RSSI — behavioral proximity evidence
+        // These fire regardless of whether device was in baseline, rewarding consistent
+        // nearby presence. They stack with delta but serve a different purpose.
+        if (device.averageRssi >= RSSI_VERY_CLOSE_THRESHOLD) {
+            score += 4
+            signals += "Very close proximity: ${device.averageRssi} dBm (≥ $RSSI_VERY_CLOSE_THRESHOLD dBm)"
+        } else if (device.averageRssi >= RSSI_CLOSE_THRESHOLD) {
+            score += 3
+            signals += "Close proximity: ${device.averageRssi} dBm (≥ $RSSI_CLOSE_THRESHOLD dBm)"
         }
 
         // Exact target name match
@@ -135,17 +169,33 @@ class CompareCapturesUseCase @Inject constructor() {
             signals += "Classification: CAMERA_CAPABLE_WEARABLE"
         }
 
-        // visibleAtStop bonus — device was still actively advertising when capture was stopped,
-        // meaning it stayed nearby for the full capture window (not a brief pass-by)
+        // Persistence — tiered: more observations = stronger behavioral evidence
+        when {
+            device.seenCount >= PERSISTENCE_HIGH_THRESHOLD -> {
+                score += 3
+                signals += "High persistence: observed ${device.seenCount} times during target capture"
+            }
+            device.seenCount >= PERSISTENCE_MEDIUM_THRESHOLD -> {
+                score += 2
+                signals += "High persistence: observed ${device.seenCount} times during target capture"
+            }
+            device.seenCount >= 5 -> {
+                score += 1
+                signals += "Persistent: observed ${device.seenCount} times during target capture"
+            }
+        }
+
+        // visibleAtStop bonus — still advertising when capture stopped (not a brief pass-by)
         if (device.visibleAtStop) {
-            score += 1
+            score += 2
             signals += "Still advertising when capture stopped"
         }
 
-        // Persistence bonus
-        if (device.seenCount >= 5) {
-            score += 1
-            signals += "Persistent: observed ${device.seenCount} times during target capture"
+        // Close proximity + persistence combo — a device that is both nearby and persistent
+        // is a strong behavioral candidate even without identity signals
+        if (device.averageRssi >= RSSI_CLOSE_THRESHOLD && device.seenCount >= PERSISTENCE_MEDIUM_THRESHOLD) {
+            score += 3
+            signals += "Close proximity + persistence: strong signal with ${device.seenCount} observations"
         }
 
         val confidence = when {
