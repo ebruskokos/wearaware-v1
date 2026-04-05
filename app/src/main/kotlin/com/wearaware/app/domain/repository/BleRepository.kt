@@ -20,6 +20,9 @@ interface BleRepository {
     /** Returns true if Bluetooth is enabled on the device. */
     val isBleAvailable: Boolean
 
+    /** Returns true if BLE scanning is currently active. */
+    val isScanning: Boolean
+
     /** Starts BLE scanning. Idempotent — safe to call if already scanning. */
     fun startScanning()
 

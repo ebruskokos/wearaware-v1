@@ -30,6 +30,13 @@ class CaptureViewModel @Inject constructor(
     private var captureStartedAt = 0L
     private var activeCaptureType: CaptureType? = null
 
+    /**
+     * True if this ViewModel called startScanning() on the repository.
+     * Used in onCleared() to only stop scanning if we started it — avoids
+     * clearing the device list while ScanViewModel is still actively scanning.
+     */
+    private var startedScanningForCapture = false
+
     init {
         // Load any previously persisted captures from Room
         viewModelScope.launch {
@@ -44,6 +51,19 @@ class CaptureViewModel @Inject constructor(
                 )
             }
             if (target != null) runCompare(baseline, target)
+        }
+
+        // Auto-start BLE scanning if it isn't already running (e.g. user navigates directly
+        // to CaptureScreen without first using the main scan screen).
+        if (!bleRepository.isScanning) {
+            bleRepository.startScanning()
+            startedScanningForCapture = true
+        }
+        _uiState.update {
+            it.copy(
+                isBleScanningActive = bleRepository.isScanning,
+                isBleAvailable = bleRepository.isBleAvailable
+            )
         }
 
         // Observe BLE device stream — only accumulates when activeCaptureType != null
@@ -72,13 +92,24 @@ class CaptureViewModel @Inject constructor(
         viewModelScope.launch {
             captureRepository.deleteSession(type)
             accumulator.clear()
-            captureStartedAt = System.currentTimeMillis()
+            val startedAt = System.currentTimeMillis()
+            captureStartedAt = startedAt
             activeCaptureType = type
             _uiState.update {
                 if (type == CaptureType.BASELINE)
-                    it.copy(baselineCaptureState = CaptureState.CAPTURING, baseline = null, liveAccumulatedCount = 0)
+                    it.copy(
+                        baselineCaptureState = CaptureState.CAPTURING,
+                        baseline = null,
+                        liveAccumulatedCount = 0,
+                        captureStartedAt = startedAt
+                    )
                 else
-                    it.copy(targetCaptureState = CaptureState.CAPTURING, target = null, liveAccumulatedCount = 0)
+                    it.copy(
+                        targetCaptureState = CaptureState.CAPTURING,
+                        target = null,
+                        liveAccumulatedCount = 0,
+                        captureStartedAt = startedAt
+                    )
             }
         }
     }
@@ -134,12 +165,31 @@ class CaptureViewModel @Inject constructor(
 
             _uiState.update {
                 if (type == CaptureType.BASELINE)
-                    it.copy(baselineCaptureState = CaptureState.DONE, baseline = session, liveAccumulatedCount = 0)
+                    it.copy(
+                        baselineCaptureState = CaptureState.DONE,
+                        baseline = session,
+                        liveAccumulatedCount = 0,
+                        captureStartedAt = 0L
+                    )
                 else
-                    it.copy(targetCaptureState = CaptureState.DONE, target = session, liveAccumulatedCount = 0)
+                    it.copy(
+                        targetCaptureState = CaptureState.DONE,
+                        target = session,
+                        liveAccumulatedCount = 0,
+                        captureStartedAt = 0L
+                    )
             }
 
             if (newTarget != null) runCompare(newBaseline, newTarget)
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Only stop scanning if this ViewModel was the one that started it —
+        // avoids clearing the shared BleRepository device list while ScanViewModel is active.
+        if (startedScanningForCapture) {
+            bleRepository.stopScanning()
         }
     }
 
@@ -174,11 +224,8 @@ class CaptureViewModel @Inject constructor(
                     targetMatchSignals = matchResult?.matchedSignals ?: emptyList()
                 )
             } else {
-                existing.lastSeenInCapture = now
-                existing.seenCount++
-                if (device.rawRssi > existing.peakRssi) existing.peakRssi = device.rawRssi
-                existing.runningRssiSum += device.rawRssi
-                existing.readingCount++
+                val matchResult = matchScores[device.id]
+                existing.updateFrom(device, matchResult, now)
             }
         }
     }
@@ -186,27 +233,5 @@ class CaptureViewModel @Inject constructor(
     private suspend fun runCompare(baseline: CaptureSession?, target: CaptureSession) {
         val results = compareCapturesUseCase(baseline, target, DefaultTargetProfile.WAYFARER_00ZS)
         _uiState.update { it.copy(compareResults = results) }
-    }
-
-    /** Internal mutable accumulator for one device during a capture window. */
-    private data class DeviceAccumulator(
-        val fingerprintId: String,
-        val advertisedName: String?,
-        val macAddress: String?,
-        val manufacturerIds: List<Int>,
-        val manufacturerDataSummary: String?,
-        val serviceUuids: List<String>,
-        val category: DeviceCategory,
-        val companyNames: List<String>,
-        val firstSeenInCapture: Long,
-        var lastSeenInCapture: Long,
-        var peakRssi: Int,
-        var runningRssiSum: Long,
-        var readingCount: Int,
-        var seenCount: Int,
-        val targetMatchScore: Int?,
-        val targetMatchSignals: List<String>
-    ) {
-        val averageRssi: Int get() = if (readingCount > 0) (runningRssiSum / readingCount).toInt() else peakRssi
     }
 }

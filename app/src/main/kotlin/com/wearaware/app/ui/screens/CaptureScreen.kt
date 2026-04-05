@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.wearaware.app.domain.model.CaptureType
 import com.wearaware.app.domain.model.CompareConfidence
@@ -54,6 +55,7 @@ fun CaptureScreen(
                 durationMs = uiState.baseline?.let { it.stoppedAt - it.startedAt },
                 liveCount = if (uiState.baselineCaptureState == CaptureState.CAPTURING)
                     uiState.liveAccumulatedCount else null,
+                captureStartedAt = uiState.captureStartedAt,
                 onStart = { viewModel.startCapture(CaptureType.BASELINE) },
                 onStop = { viewModel.stopCapture(CaptureType.BASELINE) },
                 startEnabled = uiState.targetCaptureState != CaptureState.CAPTURING,
@@ -71,6 +73,7 @@ fun CaptureScreen(
                 durationMs = uiState.target?.let { it.stoppedAt - it.startedAt },
                 liveCount = if (uiState.targetCaptureState == CaptureState.CAPTURING)
                     uiState.liveAccumulatedCount else null,
+                captureStartedAt = uiState.captureStartedAt,
                 onStart = { viewModel.startCapture(CaptureType.TARGET) },
                 onStop = { viewModel.stopCapture(CaptureType.TARGET) },
                 startEnabled = uiState.baselineCaptureState != CaptureState.CAPTURING,
@@ -98,11 +101,23 @@ private fun CaptureSection(
     deviceCount: Int?,
     durationMs: Long?,
     liveCount: Int?,
+    captureStartedAt: Long,
     onStart: () -> Unit,
     onStop: () -> Unit,
     startEnabled: Boolean,
     otherCaptureActive: Boolean
 ) {
+    // Live elapsed timer — ticks every second while a capture is active
+    var elapsedSeconds by remember(captureStartedAt) { mutableStateOf(0L) }
+    if (captureState == CaptureState.CAPTURING && captureStartedAt > 0L) {
+        LaunchedEffect(captureStartedAt) {
+            while (true) {
+                elapsedSeconds = (System.currentTimeMillis() - captureStartedAt) / 1000
+                delay(1000L)
+            }
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, style = MaterialTheme.typography.titleSmall)
         Text(
@@ -113,7 +128,11 @@ private fun CaptureSection(
 
         val chipLabel = when (captureState) {
             CaptureState.IDLE -> "IDLE"
-            CaptureState.CAPTURING -> "● CAPTURING${liveCount?.let { " — $it devices" } ?: ""}"
+            CaptureState.CAPTURING -> {
+                val mins = elapsedSeconds / 60
+                val secs = (elapsedSeconds % 60).toString().padStart(2, '0')
+                "● CAPTURING — $mins:$secs${liveCount?.let { " — $it devices" } ?: ""}"
+            }
             CaptureState.DONE -> "✓ DONE — ${deviceCount ?: 0} devices"
         }
         SuggestionChip(onClick = {}, label = {

@@ -40,6 +40,7 @@ class BleRepositoryImpl @Inject constructor(
     private val _observedDevices = MutableStateFlow<List<ObservedDevice>>(emptyList())
     override val observedDevices: StateFlow<List<ObservedDevice>> = _observedDevices.asStateFlow()
     override val isBleAvailable: Boolean get() = bleScanner.isBleAvailable
+    override val isScanning: Boolean get() = bleScanner.isScanning
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var scanJob: Job? = null
