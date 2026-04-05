@@ -1,7 +1,9 @@
 package com.wearaware.app.di
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.room.Room
+import com.google.gson.Gson
 import com.wearaware.app.data.local.CaptureDao
 import com.wearaware.app.data.local.ScanLogDao
 import com.wearaware.app.data.local.WearAwareDatabase
@@ -36,4 +38,13 @@ object DatabaseModule {
     @Provides
     fun provideCaptureDao(database: WearAwareDatabase): CaptureDao =
         database.captureDao()
+
+    @Provides
+    @Singleton
+    fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences =
+        context.getSharedPreferences("wearaware_prefs", Context.MODE_PRIVATE)
+
+    @Provides
+    @Singleton
+    fun provideGson(): Gson = Gson()
 }

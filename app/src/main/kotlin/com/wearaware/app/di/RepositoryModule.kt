@@ -2,9 +2,11 @@ package com.wearaware.app.di
 
 import com.wearaware.app.data.repository.BleRepositoryImpl
 import com.wearaware.app.data.repository.CaptureRepositoryImpl
+import com.wearaware.app.data.repository.LearnedSignatureRepositoryImpl
 import com.wearaware.app.data.repository.ScanLogRepositoryImpl
 import com.wearaware.app.domain.repository.BleRepository
 import com.wearaware.app.domain.repository.CaptureRepository
+import com.wearaware.app.domain.repository.LearnedSignatureRepository
 import com.wearaware.app.domain.repository.ScanLogRepository
 import dagger.Binds
 import dagger.Module
@@ -33,4 +35,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindCaptureRepository(impl: CaptureRepositoryImpl): CaptureRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindLearnedSignatureRepository(
+        impl: LearnedSignatureRepositoryImpl
+    ): LearnedSignatureRepository
 }
