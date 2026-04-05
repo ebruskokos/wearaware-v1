@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.room.Room
 import com.google.gson.Gson
 import com.wearaware.app.data.local.CaptureDao
+import com.wearaware.app.data.local.LearningSessionDao
 import com.wearaware.app.data.local.ScanLogDao
 import com.wearaware.app.data.local.WearAwareDatabase
 import dagger.Module
@@ -38,6 +39,10 @@ object DatabaseModule {
     @Provides
     fun provideCaptureDao(database: WearAwareDatabase): CaptureDao =
         database.captureDao()
+
+    @Provides
+    fun provideLearningSessionDao(database: WearAwareDatabase): LearningSessionDao =
+        database.learningSessionDao()
 
     @Provides
     @Singleton

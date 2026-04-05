@@ -1,5 +1,7 @@
 package com.wearaware.app.di
 
+import com.wearaware.app.data.ble.BleGattManager
+import com.wearaware.app.data.ble.BleGattManagerImpl
 import com.wearaware.app.data.repository.RulesRepositoryImpl
 import com.wearaware.app.domain.repository.RulesRepository
 import com.wearaware.app.domain.rules.FingerprintClassifier
@@ -40,4 +42,9 @@ object BleModule {
             ruleSetHash = metadata.hash
         )
     }
+
+    @Provides
+    @Singleton
+    fun provideBleGattManager(impl: BleGattManagerImpl): BleGattManager = impl
 }
+
