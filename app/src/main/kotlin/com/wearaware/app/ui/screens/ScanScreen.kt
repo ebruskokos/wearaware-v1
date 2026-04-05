@@ -2,6 +2,7 @@ package com.wearaware.app.ui.screens
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.wearaware.app.domain.model.KnownMatchConfidence
@@ -46,6 +50,28 @@ fun ScanScreen(
     ) { results ->
         if (PermissionUtils.allGranted(results)) viewModel.startScanning()
         else viewModel.setPermissionsRequired()
+    }
+
+    // Background/foreground resilience: stop scanning when app is paused, resume when foregrounded.
+    // This prevents battery drain and complies with Android BLE background restrictions.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> viewModel.stopScanning()
+                Lifecycle.Event.ON_RESUME -> {
+                    viewModel.reloadLearnedSignature()
+                    if (permissionsState.allPermissionsGranted) {
+                        viewModel.startScanning()
+                    } else {
+                        permissionsState.launchMultiplePermissionRequest()
+                    }
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Scaffold(
@@ -294,7 +320,7 @@ private fun RankedCandidatesSection(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().animateContentSize(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -309,12 +335,15 @@ private fun RankedCandidatesSection(
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // Stable key-based iteration avoids full recomposition on rank changes
             candidates.forEach { candidate ->
-                RankedCandidateRow(
-                    candidate = candidate,
-                    debugMode = debugMode,
-                    onClick = { onDeviceClick(candidate.device.id) }
-                )
+                key(candidate.device.id) {
+                    RankedCandidateRow(
+                        candidate = candidate,
+                        debugMode = debugMode,
+                        onClick = { onDeviceClick(candidate.device.id) }
+                    )
+                }
             }
         }
     }

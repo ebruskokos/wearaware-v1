@@ -31,4 +31,12 @@ interface BleRepository {
      * Idempotent — safe to call if not scanning.
      */
     fun stopScanning()
+
+    /**
+     * Adjusts BLE scan mode for battery efficiency.
+     * [locked] = true  → SCAN_MODE_BALANCED (target confirmed, save battery)
+     * [locked] = false → SCAN_MODE_LOW_LATENCY (still searching, need fast discovery)
+     * No-op if not currently scanning or if mode is already correct.
+     */
+    fun setAdaptiveScanMode(locked: Boolean)
 }

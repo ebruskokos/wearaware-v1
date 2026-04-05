@@ -42,6 +42,7 @@ class BleScanner @Inject constructor(
     val results: Flow<RawScanResult> = _results.asSharedFlow()
 
     private var scanCallback: ScanCallback? = null
+    private var currentScanMode: Int = ScanSettings.SCAN_MODE_LOW_LATENCY
 
     /** True if BLE scanning is currently active. */
     var isScanning: Boolean = false
@@ -52,7 +53,7 @@ class BleScanner @Inject constructor(
         get() = bluetoothAdapter?.isEnabled == true
 
     /**
-     * Starts BLE scanning in LOW_LATENCY mode.
+     * Starts BLE scanning using [currentScanMode].
      * Idempotent — does nothing if already scanning or if BLE is unavailable.
      */
     fun startScanning() {
@@ -60,7 +61,7 @@ class BleScanner @Inject constructor(
         val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
 
         val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .setScanMode(currentScanMode)
             .build()
 
         scanCallback = object : ScanCallback() {
@@ -90,5 +91,21 @@ class BleScanner @Inject constructor(
         }
         scanCallback = null
         isScanning = false
+    }
+
+    /**
+     * Switches the BLE scan mode.
+     * [balanced] = true uses SCAN_MODE_BALANCED (target locked — save battery).
+     * [balanced] = false uses SCAN_MODE_LOW_LATENCY (searching — fast discovery).
+     * Restarts the scanner if the mode actually changes and scanning is active.
+     */
+    fun setScanMode(balanced: Boolean) {
+        val newMode = if (balanced) ScanSettings.SCAN_MODE_BALANCED else ScanSettings.SCAN_MODE_LOW_LATENCY
+        if (newMode == currentScanMode) return
+        currentScanMode = newMode
+        if (isScanning) {
+            stopScanning()
+            startScanning()
+        }
     }
 }

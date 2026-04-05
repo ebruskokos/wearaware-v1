@@ -23,6 +23,7 @@ import com.wearaware.app.domain.usecase.ComputeRankedCandidatesUseCase
 import com.wearaware.app.domain.usecase.MatchKnownTargetSignatureUseCase
 import com.wearaware.app.domain.usecase.RefineKnownTargetFromObservationUseCase
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import com.wearaware.app.util.AboutInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -68,6 +69,10 @@ class ScanViewModel @Inject constructor(
      * as "persistent non-targets" and receive a [NON_TARGET_PENALTY] score penalty each tick.
      */
     private val nonTargetTickCounts = mutableMapOf<String, Int>()
+    /** Coroutine that collects from observeScannedDevices — cancelled on stop to prevent leaks. */
+    private var scanCollectJob: Job? = null
+    /** Tracks whether the adaptive scan mode is currently set to balanced (locked state). */
+    private var scanModeBalanced: Boolean = false
 
     companion object {
         private const val TAG = "WearAware.ScanVM"
@@ -89,7 +94,7 @@ class ScanViewModel @Inject constructor(
                 ruleSetHash = aboutInfo.ruleSetHash
             )
         }
-        val sig = knownTargetRepository.load()
+        val sig = runCatching { knownTargetRepository.load() }.getOrNull()
         if (sig != null) {
             Log.d(TAG, "Learned signature loaded: '${sig.displayName}' (fingerprintId=${sig.fingerprintId})")
             val learnedMatches = computeKnownTargetMatches(_uiState.value.devices, sig)
@@ -106,12 +111,16 @@ class ScanViewModel @Inject constructor(
         }
         bleRepository.startScanning()
         _uiState.update { it.copy(scanState = ScanState.SCANNING) }
-        viewModelScope.launch {
+        scanCollectJob?.cancel()
+        // Run processing on Default to keep scoring/matching off the main thread
+        scanCollectJob = viewModelScope.launch(Dispatchers.Default) {
             observeScannedDevices().collect { devices -> processDeviceUpdate(devices) }
         }
     }
 
     fun stopScanning() {
+        scanCollectJob?.cancel()
+        scanCollectJob = null
         bleRepository.stopScanning()
         lastAlertedAt.clear()
         loggedDeviceIds.clear()
@@ -121,6 +130,7 @@ class ScanViewModel @Inject constructor(
         primaryLockId = null
         lastAdaptiveRefineAt = 0L
         nonTargetTickCounts.clear()
+        scanModeBalanced = false
         _uiState.update {
             it.copy(
                 scanState = ScanState.STOPPED,
@@ -164,7 +174,7 @@ class ScanViewModel @Inject constructor(
 
     /** Called from ScanScreen on composition to pick up signatures saved via CaptureScreen. */
     fun reloadLearnedSignature() {
-        val sig = knownTargetRepository.load()
+        val sig = runCatching { knownTargetRepository.load() }.getOrNull()
         if (sig != null) {
             Log.d(TAG, "Learned signature reloaded: '${sig.displayName}' (fingerprintId=${sig.fingerprintId})")
         }
@@ -274,6 +284,19 @@ class ScanViewModel @Inject constructor(
         prevRankOrder = ranked.map { it.device.id }
         primaryLockId = newLockId
 
+        // 6. Battery: switch scan mode based on lock stability (only when mode needs to change)
+        val wantBalanced = newLockId != null
+        if (wantBalanced != scanModeBalanced) {
+            scanModeBalanced = wantBalanced
+            bleRepository.setAdaptiveScanMode(wantBalanced)
+        }
+
+        // 7. Prune orphaned per-device state for devices no longer in the scan list
+        val activeIds = devices.map { it.id }.toSet()
+        deviceTemporalStates.keys.retainAll(activeIds)
+        deviceLifecycles.keys.retainAll(activeIds)
+        nonTargetTickCounts.keys.retainAll(activeIds)
+
         _uiState.update {
             it.copy(
                 devices = devices,
@@ -286,7 +309,7 @@ class ScanViewModel @Inject constructor(
             )
         }
 
-        // 6. Adaptive refinement — only when a primary lock is established
+        // 8. Adaptive refinement — only when a primary lock is established
         newLockId?.let { lockedId -> maybeAdaptiveRefine(lockedId, devices) }
     }
 
@@ -461,6 +484,7 @@ class ScanViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        scanCollectJob?.cancel()
         bleRepository.stopScanning()
     }
 }

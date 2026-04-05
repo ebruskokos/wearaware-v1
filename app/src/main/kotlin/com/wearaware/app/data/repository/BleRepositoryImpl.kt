@@ -46,6 +46,11 @@ class BleRepositoryImpl @Inject constructor(
     private var scanJob: Job? = null
     private var expiryJob: Job? = null
 
+    companion object {
+        /** Hard cap on tracked devices — drops weakest RSSI to prevent unbounded growth. */
+        private const val MAX_TRACKED_DEVICES = 50
+    }
+
     override fun startScanning() {
         if (bleScanner.isScanning) return
         bleScanner.startScanning()
@@ -76,6 +81,10 @@ class BleRepositoryImpl @Inject constructor(
         _observedDevices.value = emptyList()
     }
 
+    override fun setAdaptiveScanMode(locked: Boolean) {
+        bleScanner.setScanMode(balanced = locked)
+    }
+
     private fun processRawScanResult(raw: RawScanResult) {
         val fp = raw.toFingerprint()
         val key = fp.fingerprintId
@@ -88,6 +97,11 @@ class BleRepositoryImpl @Inject constructor(
             existing.rawRssi = raw.rssi
             existing.averagedRssi = existing.smoother.addReading(raw.rssi)
         } else {
+            // Enforce device cap before inserting — drop weakest RSSI device if over limit
+            if (deviceStates.size >= MAX_TRACKED_DEVICES) {
+                val weakestKey = deviceStates.minByOrNull { it.value.averagedRssi }?.key
+                if (weakestKey != null) deviceStates.remove(weakestKey)
+            }
             val smoother = RssiSmoother()
             val debugData = BleDebugData(
                 serviceSolicitationUuids = raw.serviceSolicitationUuids,

@@ -34,22 +34,26 @@ class KnownTargetRepositoryImpl @Inject constructor(
     }
 
     override fun saveWithHistory(signature: KnownTargetSignature, deltaDescription: String) {
-        val snapshot = SignatureSnapshot(
-            version = signature.version,
-            savedAt = System.currentTimeMillis(),
-            deltaDescription = deltaDescription,
-            signature = signature
-        )
-        val history = loadHistory().toMutableList()
-        // Insert newest first; trim to MAX_HISTORY
-        history.add(0, snapshot)
-        if (history.size > MAX_HISTORY) {
-            history.subList(MAX_HISTORY, history.size).clear()
+        runCatching {
+            val snapshot = SignatureSnapshot(
+                version = signature.version,
+                savedAt = System.currentTimeMillis(),
+                deltaDescription = deltaDescription,
+                signature = signature
+            )
+            val history = loadHistory().toMutableList()
+            history.add(0, snapshot)
+            if (history.size > MAX_HISTORY) {
+                history.subList(MAX_HISTORY, history.size).clear()
+            }
+            prefs.edit()
+                .putString(KEY_KNOWN_TARGET_SIGNATURE, gson.toJson(signature))
+                .putString(KEY_SIGNATURE_HISTORY, gson.toJson(history))
+                .commit()
+        }.onFailure {
+            // History write failed — fall back to plain save so signature is never lost
+            runCatching { save(signature) }
         }
-        prefs.edit()
-            .putString(KEY_KNOWN_TARGET_SIGNATURE, gson.toJson(signature))
-            .putString(KEY_SIGNATURE_HISTORY, gson.toJson(history))
-            .commit()
     }
 
     override fun loadHistory(): List<SignatureSnapshot> {

@@ -63,7 +63,8 @@ class MergeKnownTargetSignatureUseCase @Inject constructor(
             "avgRssi=${merged.behaviorProfile?.typicalRssiAtClose} " +
             "mfIds=${merged.manufacturerIds.map { "0x${it.toString(16).uppercase()}" }}")
 
-        repository.saveWithHistory(merged, delta)
+        runCatching { repository.saveWithHistory(merged, delta) }
+            .onFailure { Log.e(TAG, "Failed to save merged signature", it) }
         return merged
     }
 
