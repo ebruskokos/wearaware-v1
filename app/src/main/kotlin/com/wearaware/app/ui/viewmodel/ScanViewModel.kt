@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.GsonBuilder
+import com.wearaware.app.domain.model.CandidateLifecycle
 import com.wearaware.app.domain.model.DeviceTemporalState
 import com.wearaware.app.domain.model.KnownMatchConfidence
 import com.wearaware.app.domain.model.KnownTargetMatchInput
@@ -17,6 +18,7 @@ import com.wearaware.app.domain.repository.KnownTargetRepository
 import com.wearaware.app.domain.repository.LearningSessionRepository
 import com.wearaware.app.domain.usecase.*
 import com.wearaware.app.domain.usecase.ApplyTemporalMatchFilterUseCase
+import com.wearaware.app.domain.usecase.ComputeRankedCandidatesUseCase
 import com.wearaware.app.domain.usecase.MatchKnownTargetSignatureUseCase
 import com.wearaware.app.domain.usecase.RefineKnownTargetFromObservationUseCase
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +42,7 @@ class ScanViewModel @Inject constructor(
     private val refineKnownTarget: RefineKnownTargetFromObservationUseCase,
     private val learningSessionRepository: LearningSessionRepository,
     private val applyTemporalFilter: ApplyTemporalMatchFilterUseCase,
+    private val computeRankedCandidates: ComputeRankedCandidatesUseCase,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -49,6 +52,12 @@ class ScanViewModel @Inject constructor(
     private val loggedDeviceIds = mutableSetOf<String>()
     /** Temporal state per device ID — reset on stopScanning(). */
     private val deviceTemporalStates = mutableMapOf<String, DeviceTemporalState>()
+    /** Per-device lifecycle tracking for ranking — reset on stopScanning(). */
+    private val deviceLifecycles = mutableMapOf<String, CandidateLifecycle>()
+    /** Stable rank order from previous tick (device IDs, #1 first). */
+    private var prevRankOrder: List<String> = emptyList()
+    /** Currently locked primary target device ID. */
+    private var primaryLockId: String? = null
 
     init {
         _uiState.update {
@@ -85,13 +94,18 @@ class ScanViewModel @Inject constructor(
         lastAlertedAt.clear()
         loggedDeviceIds.clear()
         deviceTemporalStates.clear()
+        deviceLifecycles.clear()
+        prevRankOrder = emptyList()
+        primaryLockId = null
         _uiState.update {
             it.copy(
                 scanState = ScanState.STOPPED,
                 devices = emptyList(),
                 activeAlert = null,
                 deviceMatchScores = emptyMap(),
-                learnedMatchResults = emptyMap()
+                learnedMatchResults = emptyMap(),
+                rankedCandidates = emptyList(),
+                primaryLockDeviceId = null
             )
         }
     }
@@ -211,12 +225,55 @@ class ScanViewModel @Inject constructor(
 
         val learnedMatches = computeKnownTargetMatches(devices, _uiState.value.knownTargetSignature)
 
+        // Update lifecycle data and compute ranked candidates
+        val now = System.currentTimeMillis()
+        updateLifecycles(devices, learnedMatches, now)
+        val (ranked, newLockId) = if (_uiState.value.knownTargetSignature != null) {
+            val inputs = learnedMatches.mapNotNull { (id, result) ->
+                val device = devices.find { it.id == id } ?: return@mapNotNull null
+                val lifecycle = deviceLifecycles[id] ?: return@mapNotNull null
+                ComputeRankedCandidatesUseCase.RankingInput(device, result, lifecycle)
+            }
+            computeRankedCandidates(inputs, prevRankOrder, primaryLockId, now)
+        } else {
+            emptyList<com.wearaware.app.domain.model.RankedCandidate>() to null
+        }
+        prevRankOrder = ranked.map { it.device.id }
+        primaryLockId = newLockId
+
         _uiState.update {
             it.copy(
                 devices = devices,
                 activeAlert = updatedAlert,
                 deviceMatchScores = matchScores,
-                learnedMatchResults = learnedMatches
+                learnedMatchResults = learnedMatches,
+                rankedCandidates = ranked,
+                primaryLockDeviceId = newLockId
+            )
+        }
+    }
+
+    private fun updateLifecycles(
+        devices: List<ObservedDevice>,
+        matchResults: Map<String, KnownTargetMatchResult>,
+        nowMs: Long
+    ) {
+        matchResults.forEach { (id, result) ->
+            if (result.score <= 0) return@forEach
+            val device = devices.find { it.id == id } ?: return@forEach
+            val existing = deviceLifecycles[id]
+            val isStrong = result.confidence == KnownMatchConfidence.STRONG
+            val strongSince = when {
+                isStrong && existing?.strongSince != null -> existing.strongSince
+                isStrong -> nowMs
+                else -> null
+            }
+            deviceLifecycles[id] = CandidateLifecycle(
+                discoveredAt = existing?.discoveredAt ?: nowMs,
+                lastSeenAt = device.lastSeenAt,
+                peakScore = maxOf(existing?.peakScore ?: 0, result.score),
+                totalSeenCount = (existing?.totalSeenCount ?: 0) + 1,
+                strongSince = strongSince
             )
         }
     }

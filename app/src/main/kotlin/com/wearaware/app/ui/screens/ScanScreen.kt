@@ -16,6 +16,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.wearaware.app.domain.model.KnownMatchConfidence
+import com.wearaware.app.domain.model.RankedCandidate
 import com.wearaware.app.domain.model.ScanFilter
 import com.wearaware.app.ui.components.*
 import com.wearaware.app.ui.viewmodel.ScanState
@@ -144,6 +146,16 @@ fun ScanScreen(
                 )
             }
 
+            // Ranked candidates (while scanning, only when signature is loaded)
+            if (uiState.scanState == ScanState.SCANNING && uiState.rankedCandidates.isNotEmpty()) {
+                RankedCandidatesSection(
+                    candidates = uiState.rankedCandidates,
+                    debugMode = uiState.debugMode,
+                    onDeviceClick = onDeviceClick,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+
             // Filter chips (while scanning)
             if (uiState.scanState == ScanState.SCANNING) {
                 Row(
@@ -245,6 +257,139 @@ fun ScanScreen(
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 8.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun RankedCandidatesSection(
+    candidates: List<RankedCandidate>,
+    debugMode: Boolean,
+    onDeviceClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "Target Candidates",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            candidates.forEach { candidate ->
+                RankedCandidateRow(
+                    candidate = candidate,
+                    debugMode = debugMode,
+                    onClick = { onDeviceClick(candidate.device.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RankedCandidateRow(
+    candidate: RankedCandidate,
+    debugMode: Boolean,
+    onClick: () -> Unit
+) {
+    val confidenceColor = when (candidate.matchResult.confidence) {
+        KnownMatchConfidence.STRONG -> MaterialTheme.colorScheme.primary
+        KnownMatchConfidence.POSSIBLE -> MaterialTheme.colorScheme.secondary
+        KnownMatchConfidence.WEAK -> MaterialTheme.colorScheme.tertiary
+        KnownMatchConfidence.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val rankLabel = when (candidate.rank) {
+        1 -> "#1"
+        2 -> "#2"
+        3 -> "#3"
+        else -> "#${candidate.rank}"
+    }
+    val lockBadge = if (candidate.isPrimaryLock) " 🔒" else ""
+    val displayName = if (candidate.matchResult.labelOverrideActive)
+        candidate.matchResult.signature.displayName
+    else
+        candidate.device.advertisedName ?: candidate.device.id.take(12)
+
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (candidate.rank == 1 && candidate.isPrimaryLock)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+            else
+                MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "$rankLabel$lockBadge",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = confidenceColor
+                    )
+                    Text(
+                        displayName,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                Text(
+                    candidate.matchResult.confidence.name,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = confidenceColor
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(top = 2.dp)
+            ) {
+                Text(
+                    "Score ${candidate.matchResult.score}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "Peak ${candidate.lifecycle.peakScore}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "${candidate.lifecycle.totalSeenCount} ticks",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (debugMode) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    candidate.rankReason,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                candidate.matchResult.temporalNotes.forEach { note ->
+                    Text(
+                        "  • $note",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }

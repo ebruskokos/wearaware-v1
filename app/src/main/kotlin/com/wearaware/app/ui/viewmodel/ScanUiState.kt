@@ -5,6 +5,7 @@ import com.wearaware.app.domain.model.KnownTargetSignature
 import com.wearaware.app.domain.model.MatchConfidence
 import com.wearaware.app.domain.model.ObservedDevice
 import com.wearaware.app.domain.model.PersistenceAlert
+import com.wearaware.app.domain.model.RankedCandidate
 import com.wearaware.app.domain.model.ScanFilter
 import com.wearaware.app.domain.model.TargetMatchResult
 
@@ -21,6 +22,10 @@ data class ScanUiState(
     val activeFilter: ScanFilter = ScanFilter.ALL,
     val knownTargetSignature: KnownTargetSignature? = null,
     val learnedMatchResults: Map<String, KnownTargetMatchResult> = emptyMap(),
+    /** Stable top-N ranked candidates against the learned signature, updated each scan tick. */
+    val rankedCandidates: List<RankedCandidate> = emptyList(),
+    /** Device ID of the primary lock target, or null if no lock is active. */
+    val primaryLockDeviceId: String? = null,
 ) {
     val bestMatch: Pair<ObservedDevice, TargetMatchResult>?
         get() {
