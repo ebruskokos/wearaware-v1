@@ -158,4 +158,71 @@ class CaptureViewModelLearnedTest {
         // No Apple suppression for explicit user-initiated save
         verify { saveLearnedSignature(appleDevice) }
     }
+
+    @Test
+    fun `STRONG learned match sets labelOverrideActive to true`() = runTest {
+        every { learnedSignatureRepository.load() } returns savedSig
+        every { compareCapturesUseCase(any(), any(), any()) } returns listOf(
+            CompareMatchResult(
+                capturedDevice = glassesDevice,
+                score = 10,
+                confidence = CompareConfidence.HIGH,
+                comparisonSignals = emptyList(),
+                seenInBaseline = false,
+                seenInTarget = true,
+                baselineAverageRssi = null,
+                rssiDelta = null,
+                hasBaseline = false
+            )
+        )
+
+        val vm = CaptureViewModel(
+            bleRepository, captureRepository, matchTargetDevice,
+            compareCapturesUseCase, saveLearnedSignature, matchLearnedSignature,
+            clearLearnedSignature, learnedSignatureRepository
+        )
+        advanceUntilIdle()
+
+        assertEquals(true, vm.uiState.value.learnedMatchResults["fp-glasses"]?.labelOverrideActive)
+        assertEquals(LearnedConfidence.STRONG, vm.uiState.value.learnedMatchResults["fp-glasses"]?.confidence)
+    }
+
+    @Test
+    fun `NONE learned match does not set labelOverrideActive`() = runTest {
+        val noMatchDevice = glassesDevice.copy(
+            fingerprintId = "fp-no-match",
+            manufacturerIds = emptyList(),
+            manufacturerDataSummary = null,
+            serviceUuids = emptyList(),
+            averageRssi = -90,
+            seenCount = 0,
+            visibleAtStop = false
+        )
+        val noMatchSession = targetSession.copy(devices = listOf(noMatchDevice))
+        coEvery { captureRepository.getSession(CaptureType.TARGET) } returns noMatchSession
+
+        every { learnedSignatureRepository.load() } returns savedSig
+        every { compareCapturesUseCase(any(), any(), any()) } returns listOf(
+            CompareMatchResult(
+                capturedDevice = noMatchDevice,
+                score = 0,
+                confidence = CompareConfidence.LOW,
+                comparisonSignals = emptyList(),
+                seenInBaseline = false,
+                seenInTarget = true,
+                baselineAverageRssi = null,
+                rssiDelta = null,
+                hasBaseline = false
+            )
+        )
+
+        val vm = CaptureViewModel(
+            bleRepository, captureRepository, matchTargetDevice,
+            compareCapturesUseCase, saveLearnedSignature, matchLearnedSignature,
+            clearLearnedSignature, learnedSignatureRepository
+        )
+        advanceUntilIdle()
+
+        assertEquals(false, vm.uiState.value.learnedMatchResults["fp-no-match"]?.labelOverrideActive)
+    }
 }
