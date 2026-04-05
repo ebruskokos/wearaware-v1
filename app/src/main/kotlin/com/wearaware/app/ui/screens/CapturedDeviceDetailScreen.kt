@@ -82,17 +82,26 @@ fun CapturedDeviceDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
-            // Learn this device button
+            // Learn / Relearn button
             val learnedSignature = uiState.knownTargetSignature
-            val alreadySaved = learnedSignature?.fingerprintId == device.fingerprintId
+            val isSameDevice = learnedSignature?.fingerprintId == device.fingerprintId
+            val hasAnySignature = learnedSignature != null
+            val buttonLabel = when {
+                isSameDevice -> "Relearn — update profile with this session"
+                hasAnySignature -> "Set as my glasses (replaces current)"
+                else -> "Learn this device — This is my glasses"
+            }
             Button(
                 onClick = { viewModel.learnDevice(device.fingerprintId) },
-                enabled = !alreadySaved,
                 modifier = Modifier.fillMaxWidth()
             ) {
+                Text(buttonLabel)
+            }
+            if (isSameDevice && learnedSignature != null) {
                 Text(
-                    if (alreadySaved) "Already saved as learned device"
-                    else "Learn this device — This is my glasses"
+                    "Profile learned ${learnedSignature.learnCount} time(s) — tapping above merges new data",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 

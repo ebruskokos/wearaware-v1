@@ -15,7 +15,10 @@ data class KnownTargetSignature(
     val manufacturerDataPrefixes: List<String>,
     val serviceUuids: List<String>,
     val gattServiceUuids: List<String>,
-    val behaviorProfile: KnownBehaviorProfile?
+    val behaviorProfile: KnownBehaviorProfile?,
+    /** Characteristic UUID → hex prefix of its value (4 bytes). Empty on quick-learn path. */
+    val characteristicValuePrefixes: Map<String, String> = emptyMap(),
+    val learnCount: Int = 1
 )
 
 data class KnownBehaviorProfile(

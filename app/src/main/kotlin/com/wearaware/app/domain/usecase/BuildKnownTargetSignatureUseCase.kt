@@ -23,6 +23,7 @@ class BuildKnownTargetSignatureUseCase @Inject constructor() {
             manufacturerDataPrefixes = prefixes,
             serviceUuids = observedDevice?.fingerprint?.serviceUuids ?: emptyList(),
             gattServiceUuids = gattResult.serviceUuids,
+            characteristicValuePrefixes = gattResult.characteristicValues,
             behaviorProfile = observedDevice?.let {
                 KnownBehaviorProfile(
                     typicalRssiAtClose = it.averagedRssi,

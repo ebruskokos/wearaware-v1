@@ -2,6 +2,7 @@ package com.wearaware.app.ui.screens
 
 import android.companion.CompanionDeviceManager
 import android.content.Context
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.wearaware.app.ui.viewmodel.PairAndLearnEffect
@@ -91,11 +93,70 @@ fun PairAndLearnScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        if (existing.characteristicValuePrefixes.isNotEmpty()) {
+                            Text(
+                                "Characteristic reads: ${existing.characteristicValuePrefixes.size}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            "Learned ${existing.learnCount} time(s)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Training toggle
+                            if (uiState.isTraining) {
+                                OutlinedButton(onClick = { viewModel.stopTraining() }) {
+                                    Text("Stop Training")
+                                }
+                            } else {
+                                OutlinedButton(onClick = { viewModel.startTraining() }) {
+                                    Text("Start Training")
+                                }
+                            }
+                            // Export
+                            val coroutineScope = rememberCoroutineScope()
+                            OutlinedButton(onClick = {
+                                coroutineScope.launch {
+                                    val json = viewModel.buildExportJson()
+                                    if (json != null) {
+                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/json"
+                                            putExtra(Intent.EXTRA_TEXT, json)
+                                            putExtra(Intent.EXTRA_SUBJECT, "WearAware learned profile export")
+                                        }
+                                        context.startActivity(Intent.createChooser(intent, "Export logs"))
+                                    }
+                                }
+                            }) {
+                                Text("Export Logs")
+                            }
+                        }
                         TextButton(
                             onClick = { viewModel.clearProfile() },
                             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                         ) { Text("Remove profile") }
+                    }
+                }
+                if (uiState.isTraining) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Text(
+                                "Training active — logging BLE signals every 5s",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 }
             }

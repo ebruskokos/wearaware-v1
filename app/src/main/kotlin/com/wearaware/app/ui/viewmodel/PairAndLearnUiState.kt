@@ -22,7 +22,9 @@ data class PairAndLearnUiState(
     val sessionId: String? = null,
     val recentEvents: List<PairedLearningEvent> = emptyList(),
     val existingSignature: KnownTargetSignature? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isTraining: Boolean = false,
+    val trainingSessionId: String? = null
 )
 
 sealed class PairAndLearnEffect {

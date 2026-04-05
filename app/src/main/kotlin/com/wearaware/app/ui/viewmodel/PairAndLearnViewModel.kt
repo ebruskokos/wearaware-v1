@@ -1,9 +1,11 @@
 package com.wearaware.app.ui.viewmodel
 
+import android.app.Activity
+import android.util.Log
+import androidx.activity.result.ActivityResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import android.app.Activity
-import androidx.activity.result.ActivityResult
+import com.google.gson.GsonBuilder
 import com.wearaware.app.data.ble.BleGattManager
 import com.wearaware.app.domain.model.*
 import com.wearaware.app.domain.repository.BleRepository
@@ -11,8 +13,12 @@ import com.wearaware.app.domain.repository.KnownTargetRepository
 import com.wearaware.app.domain.repository.LearningSessionRepository
 import com.wearaware.app.domain.usecase.BuildKnownTargetSignatureUseCase
 import com.wearaware.app.domain.usecase.LogLearningEventUseCase
+import com.wearaware.app.domain.usecase.MatchKnownTargetSignatureUseCase
+import com.wearaware.app.domain.usecase.extractPrefixesFromFingerprintMap
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -25,8 +31,12 @@ class PairAndLearnViewModel @Inject constructor(
     private val logLearningEvent: LogLearningEventUseCase,
     private val buildKnownTargetSignature: BuildKnownTargetSignatureUseCase,
     private val bleGattManager: BleGattManager,
-    private val bleRepository: BleRepository
+    private val bleRepository: BleRepository,
+    private val matchKnownTarget: MatchKnownTargetSignatureUseCase
 ) : ViewModel() {
+
+    private val TAG = "WearAware.PairLearnVM"
+    private var trainingJob: Job? = null
 
     private val _uiState = MutableStateFlow(PairAndLearnUiState())
     val uiState: StateFlow<PairAndLearnUiState> = _uiState.asStateFlow()
@@ -166,7 +176,95 @@ class PairAndLearnViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Builds a JSON string containing the current learned signature and the events from
+     * the most recent completed session. Returns null if no signature exists.
+     */
+    suspend fun buildExportJson(): String? {
+        val sig = _uiState.value.existingSignature ?: return null
+        val sessions = learningSessionRepository.getAllSessions()
+        val latestSession = sessions.maxByOrNull { it.startedAt }
+        val events = if (latestSession != null) {
+            learningSessionRepository.getEventsForSession(latestSession.sessionId)
+        } else emptyList()
+
+        val export = mapOf(
+            "learnedSignature" to sig,
+            "sessionCount" to sessions.size,
+            "latestSession" to latestSession,
+            "latestSessionEvents" to events
+        )
+        val gson = GsonBuilder().setPrettyPrinting().create()
+        return gson.toJson(export)
+    }
+
+    /**
+     * Starts a training session that continuously logs BLE signal observations for
+     * the learned device. Runs until [stopTraining] is called.
+     * Logs BLE_SIGNAL_OBSERVED events every 5 seconds while the device is visible.
+     */
+    fun startTraining() {
+        val sig = _uiState.value.existingSignature ?: run {
+            Log.d(TAG, "startTraining called but no signature — aborting")
+            return
+        }
+        val sessionId = UUID.randomUUID().toString()
+        trainingJob?.cancel()
+        trainingJob = viewModelScope.launch {
+            learningSessionRepository.createSession(sessionId, System.currentTimeMillis())
+            logLearningEvent(sessionId, LearningEventType.SESSION_STARTED, "Training session started")
+            _uiState.update { it.copy(trainingSessionId = sessionId, isTraining = true) }
+            Log.d(TAG, "Training session started: $sessionId")
+
+            // Observe live BLE devices and log signal for the best matching device every 5s
+            bleRepository.observedDevices
+                .collect { devices ->
+                    val matchResult = devices.mapNotNull { device ->
+                        val input = KnownTargetMatchInput(
+                            fingerprintId = device.id,
+                            manufacturerIds = device.fingerprint?.manufacturerIds ?: emptyList(),
+                            manufacturerDataPrefixes = extractPrefixesFromFingerprintMap(
+                                device.fingerprint?.manufacturerDataHex
+                            ),
+                            serviceUuids = device.fingerprint?.serviceUuids ?: emptyList(),
+                            gattServiceUuids = emptyList(),
+                            averageRssi = device.averagedRssi,
+                            seenCount = device.seenCount,
+                            visibleAtStop = false,
+                            connectable = device.rawBleData?.isConnectable ?: false
+                        )
+                        val result = matchKnownTarget(input, sig)
+                        if (result.score > 0) device to result else null
+                    }.maxByOrNull { it.second.score }
+
+                    if (matchResult != null) {
+                        val (device, result) = matchResult
+                        val detail = "RSSI=${device.averagedRssi} seenCount=${device.seenCount} " +
+                            "confidence=${result.confidence.name} score=${result.score}"
+                        logLearningEvent(sessionId, LearningEventType.BLE_SIGNAL_OBSERVED, detail)
+                        Log.d(TAG, "Training observation: $detail")
+                    }
+                    delay(5_000)
+                }
+        }
+    }
+
+    fun stopTraining() {
+        trainingJob?.cancel()
+        trainingJob = null
+        val sessionId = _uiState.value.trainingSessionId
+        if (sessionId != null) {
+            viewModelScope.launch {
+                logLearningEvent(sessionId, LearningEventType.SESSION_COMPLETED, "Training session stopped by user")
+                learningSessionRepository.updateStatus(sessionId, LearningSessionStatus.COMPLETED)
+                Log.d(TAG, "Training session stopped: $sessionId")
+            }
+        }
+        _uiState.update { it.copy(isTraining = false, trainingSessionId = null) }
+    }
+
     fun clearProfile() {
+        stopTraining()
         knownTargetRepository.clear()
         _uiState.update { it.copy(existingSignature = null) }
     }

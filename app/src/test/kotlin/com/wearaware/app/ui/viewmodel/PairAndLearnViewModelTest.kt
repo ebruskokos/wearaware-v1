@@ -9,6 +9,7 @@ import com.wearaware.app.domain.repository.KnownTargetRepository
 import com.wearaware.app.domain.repository.LearningSessionRepository
 import com.wearaware.app.domain.usecase.BuildKnownTargetSignatureUseCase
 import com.wearaware.app.domain.usecase.LogLearningEventUseCase
+import com.wearaware.app.domain.usecase.MatchKnownTargetSignatureUseCase
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,6 +30,7 @@ class PairAndLearnViewModelTest {
     private val learningSessionRepository = mockk<LearningSessionRepository>(relaxed = true)
     private val logLearningEvent = mockk<LogLearningEventUseCase>(relaxed = true)
     private val buildKnownTargetSignature = BuildKnownTargetSignatureUseCase()
+    private val matchKnownTargetSignature = MatchKnownTargetSignatureUseCase()
     private val bleGattManager = mockk<BleGattManager>()
     private val bleRepository = mockk<BleRepository>(relaxed = true)
 
@@ -54,7 +56,8 @@ class PairAndLearnViewModelTest {
             logLearningEvent = logLearningEvent,
             buildKnownTargetSignature = buildKnownTargetSignature,
             bleGattManager = bleGattManager,
-            bleRepository = bleRepository
+            bleRepository = bleRepository,
+            matchKnownTarget = matchKnownTargetSignature
         )
     }
 
@@ -79,7 +82,7 @@ class PairAndLearnViewModelTest {
         every { knownTargetRepository.load() } returns sig
         val vm = PairAndLearnViewModel(
             knownTargetRepository, learningSessionRepository, logLearningEvent,
-            buildKnownTargetSignature, bleGattManager, bleRepository
+            buildKnownTargetSignature, bleGattManager, bleRepository, matchKnownTargetSignature
         )
         assertEquals(sig, vm.uiState.value.existingSignature)
     }

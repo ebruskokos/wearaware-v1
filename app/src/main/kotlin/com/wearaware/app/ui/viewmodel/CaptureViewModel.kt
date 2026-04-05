@@ -209,7 +209,8 @@ class CaptureViewModel @Inject constructor(
         val device = _uiState.value.target?.devices
             ?.firstOrNull { it.fingerprintId == fingerprintId } ?: return
         viewModelScope.launch {
-            val sig = withContext(Dispatchers.IO) { saveKnownTarget(device) }
+            val existing = _uiState.value.knownTargetSignature
+            val sig = withContext(Dispatchers.IO) { saveKnownTarget(device, existing) }
             val matchResults = computeKnownTargetMatchesForCompare(sig, _uiState.value.compareResults)
             _uiState.update {
                 it.copy(

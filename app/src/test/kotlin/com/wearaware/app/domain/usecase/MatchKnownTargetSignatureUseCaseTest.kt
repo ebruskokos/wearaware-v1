@@ -49,7 +49,7 @@ class MatchKnownTargetSignatureUseCaseTest {
 
     @Test
     fun `mfr data prefix + mfr ID + GATT service produces STRONG`() {
-        // +5 prefix + +6 mfrId + +3 gatt = 14 → STRONG
+        // +5 prefix + +6 mfrId + +3 gatt = 14 — well above STRONG threshold (>=8)
         val result = useCase(
             makeInput(
                 manufacturerIds = listOf(0x0075),
@@ -60,15 +60,26 @@ class MatchKnownTargetSignatureUseCaseTest {
         )
         assertEquals(KnownMatchConfidence.STRONG, result.confidence)
         assertTrue(result.labelOverrideActive)
-        assertTrue(result.score >= 12)
+        assertTrue(result.score >= 8)
     }
 
     @Test
-    fun `mfr ID only with high persistence produces POSSIBLE`() {
-        // +6 mfrId + +3 seenCount = 9 → POSSIBLE (not STRONG: <12)
+    fun `mfr ID only with high persistence produces STRONG`() {
+        // +6 mfrId + +3 seenCount(>=50) = 9 — >= 8 threshold → STRONG
         val result = useCase(
             makeInput(manufacturerIds = listOf(0x0075), seenCount = 60),
             makeSignature()
+        )
+        assertEquals(KnownMatchConfidence.STRONG, result.confidence)
+        assertTrue(result.labelOverrideActive)
+    }
+
+    @Test
+    fun `mfr ID only without persistence bonus produces POSSIBLE`() {
+        // +6 mfrId, seenCount=10 (no bonus, no penalty) = 6 — POSSIBLE (>=4, <8)
+        val result = useCase(
+            makeInput(manufacturerIds = listOf(0x0075), seenCount = 10),
+            makeSignature(prefixes = emptyList(), serviceUuids = emptyList(), gattServiceUuids = emptyList())
         )
         assertEquals(KnownMatchConfidence.POSSIBLE, result.confidence)
         assertTrue(result.labelOverrideActive)
@@ -188,5 +199,58 @@ class MatchKnownTargetSignatureUseCaseTest {
         val atBoundary = useCase(makeInput(averageRssi = -80), makeSignature())
         val belowBoundary = useCase(makeInput(averageRssi = -81), makeSignature())
         assertTrue(atBoundary.score > belowBoundary.score)
+    }
+
+    // --- Label override tests ---
+
+    @Test
+    fun `STRONG match activates label override`() {
+        // mfr ID + prefix = 6+5 = 11 → STRONG → labelOverrideActive = true
+        val result = useCase(
+            makeInput(
+                manufacturerIds = listOf(0x0075),
+                prefixes = listOf("0075:deadbeef"),
+                seenCount = 10
+            ),
+            makeSignature()
+        )
+        assertEquals(KnownMatchConfidence.STRONG, result.confidence)
+        assertTrue("STRONG match must activate label override", result.labelOverrideActive)
+        assertEquals("My Meta Glasses", result.signature.displayName)
+    }
+
+    @Test
+    fun `POSSIBLE match activates label override`() {
+        // mfr ID only, no persistence = 6 → POSSIBLE → labelOverrideActive = true
+        val result = useCase(
+            makeInput(manufacturerIds = listOf(0x0075), seenCount = 10),
+            makeSignature(prefixes = emptyList(), serviceUuids = emptyList(), gattServiceUuids = emptyList())
+        )
+        assertEquals(KnownMatchConfidence.POSSIBLE, result.confidence)
+        assertTrue("POSSIBLE match must activate label override", result.labelOverrideActive)
+    }
+
+    @Test
+    fun `WEAK match does NOT activate label override`() {
+        // fingerprint match only = +3 → WEAK (>= 2, < 4) → labelOverrideActive = false
+        val result = useCase(
+            makeInput(fingerprintId = "saved-fp"),
+            makeSignature(
+                fingerprintId = "saved-fp",
+                manufacturerIds = listOf(0x9999),
+                prefixes = emptyList(),
+                serviceUuids = emptyList(),
+                gattServiceUuids = emptyList()
+            )
+        )
+        assertEquals(KnownMatchConfidence.WEAK, result.confidence)
+        assertFalse("WEAK match must NOT activate label override", result.labelOverrideActive)
+    }
+
+    @Test
+    fun `NONE match does NOT activate label override`() {
+        val result = useCase(makeInput(), makeSignature())
+        assertEquals(KnownMatchConfidence.NONE, result.confidence)
+        assertFalse("NONE match must NOT activate label override", result.labelOverrideActive)
     }
 }
