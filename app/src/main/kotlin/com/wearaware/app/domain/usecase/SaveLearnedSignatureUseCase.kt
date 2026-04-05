@@ -8,7 +8,7 @@ import javax.inject.Inject
 class SaveLearnedSignatureUseCase @Inject constructor(
     private val repository: LearnedSignatureRepository
 ) {
-    operator fun invoke(device: CapturedDevice) {
+    operator fun invoke(device: CapturedDevice): LearnedDeviceSignature {
         val prefixes = extractPrefixesFromSummary(device.manufacturerDataSummary)
         val signature = LearnedDeviceSignature(
             displayName = "My Meta Glasses",
@@ -19,5 +19,6 @@ class SaveLearnedSignatureUseCase @Inject constructor(
             serviceUuids = device.serviceUuids
         )
         repository.save(signature)
+        return signature
     }
 }

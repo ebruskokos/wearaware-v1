@@ -208,8 +208,7 @@ class CaptureViewModel @Inject constructor(
     fun learnDevice(fingerprintId: String) {
         val device = _uiState.value.target?.devices
             ?.firstOrNull { it.fingerprintId == fingerprintId } ?: return
-        saveLearnedSignature(device)
-        val sig = learnedSignatureRepository.load() ?: return
+        val sig = saveLearnedSignature(device)
         val matchResults = computeLearnedMatchesForCompare(sig, _uiState.value.compareResults)
         _uiState.update {
             it.copy(

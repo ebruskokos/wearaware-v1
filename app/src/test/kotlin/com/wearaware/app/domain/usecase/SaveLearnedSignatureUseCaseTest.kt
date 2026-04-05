@@ -44,50 +44,39 @@ class SaveLearnedSignatureUseCaseTest {
 
     @Test
     fun `saves signature with correct displayName`() {
-        useCase(makeDevice())
-        val slot = slot<LearnedDeviceSignature>()
-        verify { repo.save(capture(slot)) }
-        assertEquals("My Meta Glasses", slot.captured.displayName)
+        val result = useCase(makeDevice())
+        assertEquals("My Meta Glasses", result.displayName)
+        verify { repo.save(result) }
     }
 
     @Test
     fun `saves fingerprintId from device`() {
-        useCase(makeDevice(fingerprintId = "fp-abc"))
-        val slot = slot<LearnedDeviceSignature>()
-        verify { repo.save(capture(slot)) }
-        assertEquals("fp-abc", slot.captured.fingerprintId)
+        val result = useCase(makeDevice(fingerprintId = "fp-abc"))
+        assertEquals("fp-abc", result.fingerprintId)
     }
 
     @Test
     fun `saves manufacturerIds from device`() {
-        useCase(makeDevice(manufacturerIds = listOf(0x01AB)))
-        val slot = slot<LearnedDeviceSignature>()
-        verify { repo.save(capture(slot)) }
-        assertEquals(listOf(0x01AB), slot.captured.manufacturerIds)
+        val result = useCase(makeDevice(manufacturerIds = listOf(0x01AB)))
+        assertEquals(listOf(0x01AB), result.manufacturerIds)
     }
 
     @Test
     fun `extracts manufacturer data prefix from summary`() {
-        useCase(makeDevice(manufacturerDataSummary = "01ab:deadbeef01234567"))
-        val slot = slot<LearnedDeviceSignature>()
-        verify { repo.save(capture(slot)) }
-        assertEquals(listOf("01ab:deadbeef"), slot.captured.manufacturerDataPrefixes)
+        val result = useCase(makeDevice(manufacturerDataSummary = "01ab:deadbeef01234567"))
+        assertEquals(listOf("01ab:deadbeef"), result.manufacturerDataPrefixes)
     }
 
     @Test
     fun `saves serviceUuids from device`() {
-        useCase(makeDevice(serviceUuids = listOf("uuid-x")))
-        val slot = slot<LearnedDeviceSignature>()
-        verify { repo.save(capture(slot)) }
-        assertEquals(listOf("uuid-x"), slot.captured.serviceUuids)
+        val result = useCase(makeDevice(serviceUuids = listOf("uuid-x")))
+        assertEquals(listOf("uuid-x"), result.serviceUuids)
     }
 
     @Test
     fun `null manufacturerDataSummary produces empty prefixes`() {
-        useCase(makeDevice(manufacturerDataSummary = null))
-        val slot = slot<LearnedDeviceSignature>()
-        verify { repo.save(capture(slot)) }
-        assertTrue(slot.captured.manufacturerDataPrefixes.isEmpty())
+        val result = useCase(makeDevice(manufacturerDataSummary = null))
+        assertTrue(result.manufacturerDataPrefixes.isEmpty())
     }
 
     @Test

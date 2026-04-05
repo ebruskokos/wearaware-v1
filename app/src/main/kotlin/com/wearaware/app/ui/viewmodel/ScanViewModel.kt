@@ -72,7 +72,8 @@ class ScanViewModel @Inject constructor(
                 scanState = ScanState.STOPPED,
                 devices = emptyList(),
                 activeAlert = null,
-                deviceMatchScores = emptyMap()
+                deviceMatchScores = emptyMap(),
+                learnedMatchResults = emptyMap()
             )
         }
     }
