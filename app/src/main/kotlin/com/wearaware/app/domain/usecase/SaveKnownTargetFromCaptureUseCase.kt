@@ -7,6 +7,9 @@ import javax.inject.Inject
 /**
  * Quick-learn path: builds a KnownTargetSignature from a CapturedDevice (no GATT data).
  * Replaces SaveLearnedSignatureUseCase. gattServiceUuids is empty on this path.
+ *
+ * Threading: [invoke] calls [KnownTargetRepository.save] which issues SharedPreferences.commit()
+ * (blocking disk I/O). Callers must dispatch to [kotlinx.coroutines.Dispatchers.IO].
  */
 class SaveKnownTargetFromCaptureUseCase @Inject constructor(
     private val repository: KnownTargetRepository
